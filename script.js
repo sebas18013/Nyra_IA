@@ -1,868 +1,1607 @@
-/*
-🌐 SCRIPTS PRINCIPALES PARA LA INTERFAZ WEB
-📋 ETIQUETA: SCRIPTS_WEB
-🎯 FUNCION: Funcionalidad JavaScript para la interfaz web del sistema IA
-💡 IMPLEMENTACION: Para manejar interacciones del usuario y comunicación con la API
-*/
+// --- script.js para index.html y dashboard.html ---
 
-// Variables globales
-let usuarioActual = null;
-let estadoSistema = {
-    voz_calibrado: false,
-    camara_inicializada: false,
-    modelos_cargados: false,
-    sistema_activo: false
-};
-let intervalosActualizacion = {};
+// --- ¡IMPORTANTE! PEGA AQUÍ LA URL PUBLICA DE CLOUDFLARE TUNNEL QUE TE DIO COLAB!
+// DEBERÁ SER ALGO COMO 'https://xxxxxxxxxxxx.trycloudflare.com'  https://TU_URL_DE_CLOUDFLARE_TUNNEL_AQUITU_URL_DE_CLOUDFLARE_TUNNEL_AQUI'; // <--- ¡CAMBIA ESTO CON LA URL ACTIVA DE TU COLAB!
+// --------------------------------------------------------------------------
 
-// Inicialización cuando el DOM está listo
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Inicializando interfaz web del sistema IA...');
-    
-    // Inicializar componentes
-    inicializarSistema();
-    configurarEventListeners();
-    actualizarEstadoSistema();
-    cargarEstadisticas();
-    
-    // Configurar actualizaciones automáticas
-    intervalosActualizacion.estado = setInterval(actualizarEstadoSistema, 10000); // cada 10s
-    intervalosActualizacion.estadisticas = setInterval(cargarEstadisticas, 30000); // cada 30s
-    
-    console.log('✅ Interfaz web inicializada correctamente');
-});
-
-// Limpiar intervalos al cerrar la página
-window.addEventListener('beforeunload', function() {
-    Object.values(intervalosActualizacion).forEach(interval => {
-        if (interval) clearInterval(interval);
-    });
-});
+// Variables globales para gráficos (necesarias para actualizar desde diferentes funciones)
+let estadisticasChart = null;
+let eventosChart = null;
 
 /**
- * Inicializar sistema principal
+ * Muestra un mensaje de estado en la parte superior de la página.
+ * NOTA: Esta función requiere un div en el HTML con id="status-message" y un span con id="status-text"
+ * para mostrar los mensajes. Y también necesita el icono 'i' dentro de status-message.
+ * Ej: <div id="status-message" class="alert d-none" role="alert"><i class="me-2"></i><span id="status-text"></span></div>
+ * @param {string} tipo - 'success', 'danger', 'warning', 'info'
+ * @param {string} mensaje - El texto del mensaje.
  */
-function inicializarSistema() {
-    try {
-        // Verificar si hay elementos necesarios en la página
-        const elementosRequeridos = [
-            'area-mensajes',
-            'input-mensaje',
-            'estado-usuario'
-        ];
-        
-        elementosRequeridos.forEach(id => {
-            const elemento = document.getElementById(id);
-            if (!elemento) {
-                console.warn(`⚠️ Elemento requerido no encontrado: ${id}`);
+function mostrarMensajeEstado(tipo, mensaje) {
+    const statusMessageDiv = document.getElementById('status-message');
+    const statusTextSpan = document.getElementById('status-text');
+    const iconElement = statusMessageDiv ? statusMessageDiv.querySelector('i') : null; // Get icon element
+
+    if (statusMessageDiv && statusTextSpan) {
+        statusMessageDiv.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning', 'alert-info');
+        if (iconElement) {
+            iconElement.className = ''; // Reset icon
+        }
+
+        statusMessageDiv.classList.add(`alert-${tipo}`);
+        statusTextSpan.textContent = mensaje;
+
+        if (iconElement) { // Add icon based on type
+            switch (tipo) {
+                case 'success':
+                    iconElement.classList.add('fas', 'fa-check-circle');
+                    break;
+                case 'danger':
+                    iconElement.classList.add('fas', 'fa-exclamation-triangle');
+                    break;
+                case 'warning':
+                    iconElement.classList.add('fas', 'fa-exclamation-circle');
+                    break;
+                case 'info':
+                default:
+                    iconElement.classList.add('fas', 'fa-info-circle');
+                    break;
             }
+            iconElement.classList.add('me-2'); // Add margin right to icon
+        }
+
+        // Ocultar el mensaje después de un tiempo
+        setTimeout(() => {
+            statusMessageDiv.classList.add('d-none');
+        }, 5000); // 5 segundos
+    } else {
+        console.warn('Elementos de mensaje de estado no encontrados. No se puede mostrar el mensaje en la UI:', mensaje);
+    }
+}
+
+
+// Función para actualizar los elementos del DOM relacionados con el estado del sistema (usado en index.html)
+function actualizarEstadoSistemaUI(data) {
+    if (document.getElementById('estado-voz')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-voz').textContent = data.estado_voz ? (data.estado_voz.calibrado ? 'Activo' : 'Inactivo') : 'N/A';
+        document.getElementById('estado-voz').className = `badge ${data.estado_voz && data.estado_voz.calibrado ? 'bg-success' : 'bg-danger'}`;
+    }
+    if (document.getElementById('estado-camara')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-camara').textContent = data.estado_facial ? (data.estado_facial.inicializado ? 'Activa' : 'Inactiva') : 'N/A';
+        document.getElementById('estado-camara').className = `badge ${data.estado_facial && data.estado_facial.inicializado ? 'bg-success' : 'bg-danger'}`;
+    }
+    if (document.getElementById('estado-modelos')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-modelos').textContent = data.modelos_ia ? (data.modelos_ia.cargados ? 'Cargados' : 'Fallidos') : 'N/A';
+        document.getElementById('estado-modelos').className = `badge ${data.modelos_ia && data.modelos_ia.cargados ? 'bg-success' : 'bg-danger'}`;
+    } else if (document.getElementById('estado-modelos')) { // Fallback if no specific models_ia field
+        document.getElementById('estado-modelos').textContent = data.estado_general === 'online' ? 'Cargados' : 'Inactivos';
+        document.getElementById('estado-modelos').className = `badge ${data.estado_general === 'online' ? 'bg-success' : 'bg-danger'}`;
+    }
+
+    if (document.getElementById('estado-activo')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-activo').textContent = data.estado_general === 'online' ? 'Sí' : 'No';
+        document.getElementById('estado-activo').className = `badge ${data.estado_general === 'online' ? 'bg-success' : 'bg-danger'}`;
+    }
+
+    const estadoUsuarioNav = document.getElementById('estado-usuario');
+    if (estadoUsuarioNav) { // Check if nav user status exists
+        if (data.usuario_actual && data.usuario_actual.nombre) {
+            estadoUsuarioNav.innerHTML = `<i class="fas fa-user-check me-1"></i> ${data.usuario_actual.nombre} (${(data.usuario_actual.confianza * 100).toFixed(1)}%)`;
+            estadoUsuarioNav.className = 'nav-link text-success';
+        } else {
+            estadoUsuarioNav.innerHTML = `<i class="fas fa-user-slash me-1"></i> No identificado`;
+            estadoUsuarioNav.className = 'nav-link text-muted';
+        }
+    }
+}
+
+// Función para actualizar las estadísticas rápidas en la parte inferior de index.html
+function actualizarEstadisticasRapidas(data) {
+    if (document.getElementById('stat-usuarios')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-usuarios').textContent = data.total_usuarios || 0;
+    }
+    if (document.getElementById('stat-conversaciones')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-conversaciones').textContent = data.conversaciones_hoy || 0;
+    }
+    if (document.getElementById('stat-uptime')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-uptime').textContent = (data.horas_activo || 0).toFixed(1);
+    }
+    if (document.getElementById('stat-eventos')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-eventos').textContent = data.eventos_sistema || 0;
+    }
+}
+
+// Función para actualizar los elementos del DOM con los datos de estadísticas (usado en dashboard.html)
+function actualizarElementosEstadisticasDashboard(data) {
+    if (document.getElementById('stat-usuarios-dashboard')) { // Check if this element exists (likely dashboard.html)
+        document.getElementById('stat-usuarios-dashboard').textContent = data.total_usuarios || 0;
+    }
+    if (document.getElementById('stat-conversaciones-dashboard')) {
+        document.getElementById('stat-conversaciones-dashboard').textContent = data.conversaciones_hoy || 0;
+    }
+    if (document.getElementById('stat-uptime-dashboard')) {
+        document.getElementById('stat-uptime-dashboard').textContent = (data.horas_activo || 0).toFixed(1);
+    }
+    if (document.getElementById('stat-eventos-dashboard')) {
+        document.getElementById('stat-eventos-dashboard').textContent = data.eventos_sistema || 0;
+    }
+
+    // Actualizar estado de voz (dashboard specific)
+    if (document.getElementById('estado-voz-calibrado') && data.estado_voz) {
+        const vozCalibrado = document.getElementById('estado-voz-calibrado');
+        vozCalibrado.textContent = data.estado_voz.calibrado ? 'Calibrado' : 'No Calibrado';
+        vozCalibrado.className = `badge ${data.estado_voz.calibrado ? 'bg-success' : 'bg-danger'}`;
+        document.getElementById('umbral-energia-voz').textContent = data.estado_voz.energy_threshold || 'N/A';
+        document.getElementById('umbral-pausa-voz').textContent = data.estado_voz.pause_threshold || 'N/A';
+        document.getElementById('dispositivo-voz').textContent = data.estado_voz.dispositivo_activo || 'N/A';
+        const vozEscuchando = document.getElementById('escucha-continua-voz');
+        vozEscuchando.textContent = data.estado_voz.escuchando_continuo ? 'Activa' : 'Inactiva';
+        vozEscuchando.className = `badge ${data.estado_voz.escuchando_continuo ? 'bg-success' : 'bg-secondary'}`;
+    }
+
+    // Actualizar estado facial (dashboard specific)
+    if (document.getElementById('estado-facial-inicializado') && data.estado_facial) {
+        const facialInicializado = document.getElementById('estado-facial-inicializado');
+        facialInicializado.textContent = data.estado_facial.inicializado ? 'Inicializado' : 'No Inicializado';
+        facialInicializado.className = `badge ${data.estado_facial.inicializado ? 'bg-success' : 'bg-danger'}`;
+        document.getElementById('camara-facial').textContent = data.estado_facial.camara_activa || 'N/A';
+        if (data.estado_facial.resolucion) {
+            document.getElementById('resolucion-facial').textContent = `${data.estado_facial.resolucion[0]}x${data.estado_facial.resolucion[1]}`;
+        } else {
+            document.getElementById('resolucion-facial').textContent = 'N/A';
+        }
+        document.getElementById('fps-facial').textContent = data.estado_facial.fps || 'N/A';
+        document.getElementById('modelo-facial').textContent = data.estado_facial.modelo_deteccion || 'N/A';
+        const facialCapturando = document.getElementById('capturando-facial');
+        facialCapturando.textContent = data.estado_facial.capturando ? 'Activo' : 'Inactiva';
+        facialCapturando.className = `badge ${data.estado_facial.capturando ? 'bg-success' : 'bg-secondary'}`;
+    }
+
+    // Actualizar análisis de comportamiento (dashboard specific)
+    if (document.getElementById('usuarios-analisis') && data.analisis_comportamiento) {
+        document.getElementById('usuarios-analisis').textContent = data.analisis_comportamiento.usuarios_con_analisis || 0;
+        document.getElementById('interacciones-totales').textContent = data.analisis_comportamiento.interacciones_totales || 0;
+        document.getElementById('usuarios-activos-7d').textContent = data.analisis_comportamiento.usuarios_activos_ultima_semana || 0;
+        document.getElementById('patrones-detectados').textContent = data.analisis_comportamiento.patrones_detectados || 0;
+    }
+}
+
+
+// Función principal para obtener y actualizar todos los datos de estado/estadísticas
+function obtenerYActualizarTodo() {
+    fetch(`${BASE_API_URL}/api/obtener_estadisticas`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                console.error('Error al obtener estadísticas:', data.error);
+                mostrarMensajeEstado('danger', 'No se pudieron cargar las estadísticas del sistema: ' + data.error);
+                return;
+            }
+            // Logic for index.html elements
+            actualizarEstadoSistemaUI(data);
+            actualizarEstadisticasRapidas(data);
+
+            // Logic for dashboard.html elements (only if they exist on the page)
+            actualizarElementosEstadisticasDashboard(data);
+            actualizarGraficos(data); // This assumes charts are initialized in dashboard context
+            if (document.getElementById('log-eventos')) { // Check if log events container exists
+                cargarEventosRecientes(data.eventos_log);
+            }
+
+            mostrarMensajeEstado('success', 'Estado del sistema actualizado.');
+        })
+        .catch(error => {
+            console.error('Error de red al obtener estadísticas:', error);
+            mostrarMensajeEstado('danger', 'Error de conexión: No se pudo conectar con el backend de la IA. Asegúrate de que el cuaderno de Colab esté ejecutándose y la URL de ngrok/Cloudflare sea correcta.');
         });
-        
-        // Configurar área de mensajes
-        const areaMensajes = document.getElementById('area-mensajes');
-        if (areaMensajes) {
-            // Limpiar mensajes anteriores excepto el mensaje del sistema
-            const mensajesExistentes = areaMensajes.querySelectorAll(':not(.mensaje-sistema)');
-            mensajesExistentes.forEach(msg => msg.remove());
-        }
-        
-    } catch (error) {
-        console.error('❌ Error inicializando sistema:', error);
-        mostrarNotificacion('Error inicializando sistema', 'error');
-    }
 }
 
-/**
- * Configurar event listeners
- */
-function configurarEventListeners() {
-    try {
-        // Input de mensaje - enviar con Enter
-        const inputMensaje = document.getElementById('input-mensaje');
-        if (inputMensaje) {
-            inputMensaje.addEventListener('keypress', function(event) {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    enviarMensaje();
-                }
-            });
-        }
-        
-        // Botones de identificación y registro
-        const btnIdentificar = document.getElementById('btn-identificar');
-        if (btnIdentificar) {
-            btnIdentificar.addEventListener('click', identificarUsuario);
-        }
-        
-        const btnRegistrar = document.getElementById('btn-registrar');
-        if (btnRegistrar) {
-            btnRegistrar.addEventListener('click', mostrarFormularioRegistro);
-        }
-        
-        const btnConfirmarRegistro = document.getElementById('btn-confirmar-registro');
-        if (btnConfirmarRegistro) {
-            btnConfirmarRegistro.addEventListener('click', confirmarRegistroUsuario);
-        }
-        
-        const btnCancelarRegistro = document.getElementById('btn-cancelar-registro');
-        if (btnCancelarRegistro) {
-            btnCancelarRegistro.addEventListener('click', ocultarFormularioRegistro);
-        }
-        
-        // Input de nombre de usuario - enviar con Enter
-        const nombreUsuario = document.getElementById('nombre-usuario');
-        if (nombreUsuario) {
-            nombreUsuario.addEventListener('keypress', function(event) {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    confirmarRegistroUsuario();
-                }
-            });
-        }
-        
-    } catch (error) {
-        console.error('❌ Error configurando event listeners:', error);
-    }
-}
 
-/**
- * Enviar mensaje al asistente
- */
-async function enviarMensaje() {
+// Función para enviar un mensaje al asistente IA (usado en index.html)
+function enviarMensaje() {
     const inputMensaje = document.getElementById('input-mensaje');
     const areaMensajes = document.getElementById('area-mensajes');
     const indicadorEscritura = document.getElementById('indicador-escritura');
-    
-    if (!inputMensaje || !areaMensajes) {
-        console.error('❌ Elementos de chat no encontrados');
+
+    if (!inputMensaje || !areaMensajes || !indicadorEscritura) { // Check if elements exist
+        console.warn('Elementos de chat no encontrados. No se puede enviar mensaje.');
         return;
     }
-    
-    const mensaje = inputMensaje.value.trim();
-    if (!mensaje) {
-        inputMensaje.focus();
-        return;
-    }
-    
-    try {
-        // Agregar mensaje del usuario
-        agregarMensajeAlChat(mensaje, 'usuario');
-        inputMensaje.value = '';
-        
-        // Mostrar indicador de escritura
-        if (indicadorEscritura) {
-            indicadorEscritura.classList.remove('d-none');
-        }
-        
-        // Enviar mensaje a la API
-        const response = await fetch('/api/enviar_mensaje', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ mensaje: mensaje })
-        });
-        
-        const data = await response.json();
-        
-        // Ocultar indicador de escritura
-        if (indicadorEscritura) {
-            indicadorEscritura.classList.add('d-none');
-        }
-        
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        // Agregar respuesta del asistente
-        agregarMensajeAlChat(data.respuesta, 'asistente');
-        
-        // Actualizar información de usuario si está disponible
-        if (data.usuario && !usuarioActual) {
-            usuarioActual = { nombre: data.usuario };
-            actualizarUIUsuario();
-        }
-        
-    } catch (error) {
-        console.error('❌ Error enviando mensaje:', error);
-        
-        // Ocultar indicador de escritura
-        if (indicadorEscritura) {
-            indicadorEscritura.classList.add('d-none');
-        }
-        
-        agregarMensajeAlChat(
-            'Lo siento, hubo un error procesando tu mensaje. Por favor, inténtalo de nuevo.',
-            'sistema'
-        );
-        
-        mostrarNotificacion('Error enviando mensaje: ' + error.message, 'error');
-    }
-}
 
-/**
- * Agregar mensaje al chat
- */
-function agregarMensajeAlChat(mensaje, tipo) {
-    const areaMensajes = document.getElementById('area-mensajes');
-    if (!areaMensajes) return;
-    
-    const divMensaje = document.createElement('div');
-    const timestamp = new Date().toLocaleTimeString();
-    
-    // Configurar clase y contenido según el tipo
-    switch (tipo) {
-        case 'usuario':
-            divMensaje.className = 'mensaje-usuario';
-            divMensaje.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>${escapeHtml(mensaje)}</div>
-                    <small class="text-muted ms-2">${timestamp}</small>
-                </div>
-            `;
-            break;
-            
-        case 'asistente':
-            divMensaje.className = 'mensaje-asistente';
-            divMensaje.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <i class="fas fa-robot me-2"></i>
-                        ${escapeHtml(mensaje)}
-                    </div>
-                    <small class="text-muted ms-2">${timestamp}</small>
-                </div>
-            `;
-            break;
-            
-        case 'sistema':
-            divMensaje.className = 'mensaje-sistema';
-            divMensaje.innerHTML = `
-                <i class="fas fa-info-circle me-2"></i>
-                ${escapeHtml(mensaje)}
-                <small class="d-block mt-1">${timestamp}</small>
-            `;
-            break;
+    const mensajeUsuario = inputMensaje.value.trim();
+    if (mensajeUsuario === '') {
+        return; 
     }
-    
-    // Agregar mensaje al área
-    areaMensajes.appendChild(divMensaje);
-    
-    // Hacer scroll al final
-    areaMensajes.scrollTop = areaMensajes.scrollHeight;
-    
-    // Animación de entrada
-    divMensaje.style.opacity = '0';
-    divMensaje.style.transform = 'translateY(20px)';
-    
-    setTimeout(() => {
-        divMensaje.style.transition = 'all 0.3s ease-out';
-        divMensaje.style.opacity = '1';
-        divMensaje.style.transform = 'translateY(0)';
-    }, 50);
-}
 
-/**
- * Comando de voz
- */
-async function comandoVoz() {
-    const btnVoz = document.getElementById('btn-voz');
-    
-    if (!btnVoz) return;
-    
-    try {
-        // Cambiar estado del botón
-        btnVoz.disabled = true;
-        btnVoz.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        
-        agregarMensajeAlChat('Escuchando comando de voz...', 'sistema');
-        
-        // Llamar API de comando de voz
-        const response = await fetch('/api/comando_voz', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        if (data.comando) {
-            // Agregar comando reconocido
-            agregarMensajeAlChat(data.comando, 'usuario');
-            
-            // Agregar respuesta
-            if (data.respuesta) {
-                setTimeout(() => {
-                    agregarMensajeAlChat(data.respuesta, 'asistente');
-                }, 500);
-            }
-        } else {
-            agregarMensajeAlChat('No se pudo capturar comando de voz', 'sistema');
-        }
-        
-    } catch (error) {
-        console.error('❌ Error con comando de voz:', error);
-        agregarMensajeAlChat('Error capturando comando de voz: ' + error.message, 'sistema');
-        mostrarNotificacion('Error con comando de voz', 'error');
-    } finally {
-        // Restaurar botón
-        if (btnVoz) {
-            btnVoz.disabled = false;
-            btnVoz.innerHTML = '<i class="fas fa-microphone"></i>';
-        }
-    }
-}
+    areaMensajes.innerHTML += `
+        <div class="mensaje-usuario text-end mb-2">
+            <span class="badge bg-primary p-2 rounded-pill">${mensajeUsuario}</span>
+        </div>
+    `;
+    inputMensaje.value = ''; 
+    areaMensajes.scrollTop = areaMensajes.scrollHeight; 
 
-/**
- * Identificar usuario
- */
-async function identificarUsuario() {
-    const btnIdentificar = document.getElementById('btn-identificar');
-    const resultadoIdentificacion = document.getElementById('resultado-identificacion');
-    
-    if (!btnIdentificar) return;
-    
-    try {
-        // Cambiar estado del botón
-        btnIdentificar.disabled = true;
-        btnIdentificar.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Identificando...';
-        
-        // Mostrar resultado temporal
-        if (resultadoIdentificacion) {
-            resultadoIdentificacion.className = 'alert alert-info';
-            resultadoIdentificacion.innerHTML = '<i class="fas fa-camera me-2"></i>Capturando imagen facial...';
-            resultadoIdentificacion.classList.remove('d-none');
-        }
-        
-        // Llamar API de identificación
-        const response = await fetch('/api/identificar_usuario', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        if (data.identificado && data.usuario) {
-            // Usuario identificado exitosamente
-            usuarioActual = data.usuario;
-            actualizarUIUsuario();
-            
-            if (resultadoIdentificacion) {
-                resultadoIdentificacion.className = 'alert alert-success';
-                resultadoIdentificacion.innerHTML = `
-                    <i class="fas fa-user-check me-2"></i>
-                    ¡Usuario identificado! Bienvenido, <strong>${data.usuario.nombre}</strong>
-                    <br><small>Confianza: ${(data.usuario.confianza * 100).toFixed(1)}%</small>
-                `;
-            }
-            
-            agregarMensajeAlChat(`¡Hola ${data.usuario.nombre}! Te he identificado correctamente.`, 'asistente');
-            mostrarNotificacion(`Usuario identificado: ${data.usuario.nombre}`, 'success');
-            
-        } else {
-            // No se pudo identificar al usuario
-            if (resultadoIdentificacion) {
-                resultadoIdentificacion.className = 'alert alert-warning';
-                resultadoIdentificacion.innerHTML = `
-                    <i class="fas fa-user-times me-2"></i>
-                    No se pudo identificar el usuario. 
-                    <br><small>Asegúrate de estar bien iluminado y mirando directamente a la cámara.</small>
-                `;
-            }
-            
-            mostrarNotificacion('Usuario no identificado', 'warning');
-        }
-        
-    } catch (error) {
-        console.error('❌ Error identificando usuario:', error);
-        
-        if (resultadoIdentificacion) {
-            resultadoIdentificacion.className = 'alert alert-danger';
-            resultadoIdentificacion.innerHTML = `
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                Error en la identificación: ${error.message}
-            `;
-        }
-        
-        mostrarNotificacion('Error en identificación: ' + error.message, 'error');
-    } finally {
-        // Restaurar botón
-        if (btnIdentificar) {
-            btnIdentificar.disabled = false;
-            btnIdentificar.innerHTML = '<i class="fas fa-camera me-1"></i>Identificar Usuario';
-        }
-    }
-}
+    indicadorEscritura.classList.remove('d-none'); 
 
-/**
- * Mostrar formulario de registro
- */
-function mostrarFormularioRegistro() {
-    const formularioRegistro = document.getElementById('formulario-registro');
-    const btnRegistrar = document.getElementById('btn-registrar');
-    const nombreUsuario = document.getElementById('nombre-usuario');
-    
-    if (formularioRegistro) {
-        formularioRegistro.classList.remove('d-none');
-    }
-    
-    if (btnRegistrar) {
-        btnRegistrar.disabled = true;
-    }
-    
-    if (nombreUsuario) {
-        nombreUsuario.focus();
-    }
-}
+    fetch(`${BASE_API_URL}/api/comando_ia`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ comando: mensajeUsuario })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        indicadorEscritura.classList.add('d-none'); 
 
-/**
- * Ocultar formulario de registro
- */
-function ocultarFormularioRegistro() {
-    const formularioRegistro = document.getElementById('formulario-registro');
-    const btnRegistrar = document.getElementById('btn-registrar');
-    const nombreUsuario = document.getElementById('nombre-usuario');
-    
-    if (formularioRegistro) {
-        formularioRegistro.classList.add('d-none');
-    }
-    
-    if (btnRegistrar) {
-        btnRegistrar.disabled = false;
-    }
-    
-    if (nombreUsuario) {
-        nombreUsuario.value = '';
-    }
-}
-
-/**
- * Confirmar registro de usuario
- */
-async function confirmarRegistroUsuario() {
-    const nombreUsuario = document.getElementById('nombre-usuario');
-    const btnConfirmarRegistro = document.getElementById('btn-confirmar-registro');
-    const resultadoIdentificacion = document.getElementById('resultado-identificacion');
-    
-    if (!nombreUsuario) return;
-    
-    const nombre = nombreUsuario.value.trim();
-    if (!nombre) {
-        mostrarNotificacion('Por favor, ingresa tu nombre', 'warning');
-        nombreUsuario.focus();
-        return;
-    }
-    
-    try {
-        // Cambiar estado del botón
-        if (btnConfirmarRegistro) {
-            btnConfirmarRegistro.disabled = true;
-            btnConfirmarRegistro.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Registrando...';
-        }
-        
-        // Mostrar resultado temporal
-        if (resultadoIdentificacion) {
-            resultadoIdentificacion.className = 'alert alert-info';
-            resultadoIdentificacion.innerHTML = `
-                <i class="fas fa-user-plus me-2"></i>
-                Registrando usuario: <strong>${nombre}</strong>
-                <br><small>Capturando datos biométricos...</small>
-            `;
-            resultadoIdentificacion.classList.remove('d-none');
-        }
-        
-        // Llamar API de registro
-        const response = await fetch('/api/registrar_usuario', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ nombre: nombre })
-        });
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        if (data.success) {
-            // Usuario registrado exitosamente
-            usuarioActual = {
-                id: data.usuario_id,
-                nombre: nombre,
-                confianza: 1.0
-            };
-            
-            actualizarUIUsuario();
-            ocultarFormularioRegistro();
-            
-            if (resultadoIdentificacion) {
-                resultadoIdentificacion.className = 'alert alert-success';
-                resultadoIdentificacion.innerHTML = `
-                    <i class="fas fa-user-check me-2"></i>
-                    ¡Registro exitoso! Bienvenido, <strong>${nombre}</strong>
-                    <br><small>ID de usuario: ${data.usuario_id}</small>
-                `;
-            }
-            
-            agregarMensajeAlChat(data.mensaje || `¡Hola ${nombre}! Te he registrado exitosamente.`, 'asistente');
-            mostrarNotificacion('Usuario registrado exitosamente', 'success');
-            
-        } else {
-            throw new Error('Error en el registro');
-        }
-        
-    } catch (error) {
-        console.error('❌ Error registrando usuario:', error);
-        
-        if (resultadoIdentificacion) {
-            resultadoIdentificacion.className = 'alert alert-danger';
-            resultadoIdentificacion.innerHTML = `
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                Error en el registro: ${error.message}
-            `;
-        }
-        
-        mostrarNotificacion('Error en registro: ' + error.message, 'error');
-    } finally {
-        // Restaurar botón
-        if (btnConfirmarRegistro) {
-            btnConfirmarRegistro.disabled = false;
-            btnConfirmarRegistro.innerHTML = '<i class="fas fa-save me-1"></i>Confirmar Registro';
-        }
-    }
-}
-
-/**
- * Actualizar UI con información de usuario
- */
-function actualizarUIUsuario() {
-    const estadoUsuario = document.getElementById('estado-usuario');
-    
-    if (estadoUsuario && usuarioActual) {
-        estadoUsuario.innerHTML = `
-            <i class="fas fa-user-check me-1 text-success"></i>
-            ${usuarioActual.nombre}
+        const respuestaIA = data.respuesta_texto || "Lo siento, no pude procesar tu solicitud.";
+        areaMensajes.innerHTML += `
+            <div class="mensaje-sistema text-start mb-2">
+                <span class="badge bg-success p-2 rounded-pill">${respuestaIA}</span>
+            </div>
         `;
-        estadoUsuario.className = 'nav-link text-success';
-    }
+        areaMensajes.scrollTop = areaMensajes.scrollHeight; 
+
+        if (data.url_audio) {
+            const audio = new Audio(data.url_audio);
+            audio.play().catch(e => console.error("Error al reproducir audio:", e));
+        }
+        mostrarMensajeEstado('success', 'Mensaje enviado y recibido por la IA.');
+    })
+    .catch(error => {
+        indicadorEscritura.classList.add('d-none'); 
+        console.error('Error al enviar mensaje a la IA:', error);
+        areaMensajes.innerHTML += `
+            <div class="mensaje-sistema text-start mb-2">
+                <span class="badge bg-danger p-2 rounded-pill">Error: No se pudo conectar con el asistente.</span>
+            </div>
+        `;
+        areaMensajes.scrollTop = areaMensajes.scrollHeight;
+        mostrarMensajeEstado('danger', 'Error de conexión: No se pudo conectar con el asistente IA. Verifica el backend.');
+    });
 }
 
-/**
- * Actualizar estado del sistema
- */
-async function actualizarEstadoSistema() {
-    try {
-        const response = await fetch('/api/estado_sistema');
-        const data = await response.json();
-        
-        if (data.error) {
-            console.error('Error obteniendo estado del sistema:', data.error);
+// Función para manejar el comando de voz (placeholder, usado en index.html)
+function comandoVoz() {
+    mostrarMensajeModal('Función de Voz', 'La funcionalidad de reconocimiento de voz está en desarrollo. ¡Pronto podrás hablar con Nyra!', false);
+}
+
+// Funciones para Identificación y Registro (simuladas con modales, usado en index.html)
+function identificarUsuario() {
+    mostrarMensajeModal('Identificación de Usuario', 'Simulando identificación facial. Esto podría tomar unos segundos.', false);
+    setTimeout(() => {
+        const isIdentified = Math.random() > 0.5; 
+        if (isIdentified) {
+            const nombre = "Usuario Demo";
+            const id = "USER-12345";
+            const confianza = (0.7 + Math.random() * 0.3).toFixed(2); 
+            mostrarMensajeModal('Identificación Exitosa', `¡Bienvenido, ${nombre}! Confianza: ${(confianza * 100).toFixed(1)}%.`, false);
+            mostrarMensajeEstado('success', `Usuario ${nombre} identificado correctamente.`);
+            if (document.getElementById('estado-usuario')) {
+                document.getElementById('estado-usuario').innerHTML = `<i class="fas fa-user-check me-1"></i> ${nombre} (${(confianza * 100).toFixed(1)}%)`;
+                document.getElementById('estado-usuario').className = 'nav-link text-success';
+            }
+            if (document.getElementById('resultado-identificacion')) {
+                document.getElementById('resultado-identificacion').innerHTML = `<i class="fas fa-check-circle me-1"></i> Usuario identificado: <strong>${nombre}</strong>`;
+                document.getElementById('resultado-identificacion').classList.remove('d-none', 'alert-danger');
+                document.getElementById('resultado-identificacion').classList.add('alert-success');
+            }
+        } else {
+            mostrarMensajeModal('Identificación Fallida', 'No se pudo identificar al usuario. Inténtalo de nuevo.', false);
+            mostrarMensajeEstado('danger', 'Fallo en la identificación de usuario.');
+            if (document.getElementById('resultado-identificacion')) {
+                document.getElementById('resultado-identificacion').innerHTML = `<i class="fas fa-times-circle me-1"></i> No se pudo identificar al usuario.`;
+                document.getElementById('resultado-identificacion').classList.remove('d-none', 'alert-success');
+                document.getElementById('resultado-identificacion').classList.add('alert-danger');
+            }
+        }
+    }, 2000); 
+}
+
+function registrarNuevoUsuario() {
+    const formularioRegistro = document.getElementById('formulario-registro');
+    if (!formularioRegistro) {
+        console.warn('Formulario de registro no encontrado.');
+        return;
+    }
+    formularioRegistro.classList.remove('d-none');
+    if (document.getElementById('resultado-identificacion')) {
+        document.getElementById('resultado-identificacion').classList.add('d-none'); // Ocultar mensaje anterior
+    }
+
+    document.getElementById('btn-confirmar-registro').onclick = function() {
+        const nombreUsuario = document.getElementById('nombre-usuario').value.trim();
+        if (nombreUsuario === '') {
+            mostrarMensajeModal('Advertencia', 'Por favor, introduce un nombre para el registro.', false);
             return;
         }
         
-        // Actualizar estado global
-        estadoSistema = data.componentes || estadoSistema;
-        
-        // Actualizar usuario actual si no está establecido
-        if (data.usuario_actual && data.usuario_actual.identificado && !usuarioActual) {
-            usuarioActual = {
-                id: data.usuario_actual.id,
-                nombre: data.usuario_actual.nombre,
-                confianza: 1.0
-            };
-            actualizarUIUsuario();
-        }
-        
-        // Actualizar indicadores de estado
-        actualizarIndicadoresEstado(data.componentes);
-        
-    } catch (error) {
-        console.error('❌ Error actualizando estado del sistema:', error);
+        mostrarMensajeModal('Registro de Usuario', `Registrando a "${nombreUsuario}". Esto tomará unos momentos.`, false);
+        setTimeout(() => {
+            const isRegistered = Math.random() > 0.3; 
+            if (isRegistered) {
+                mostrarMensajeModal('Registro Exitoso', `¡Usuario "${nombreUsuario}" registrado con éxito!`, false);
+                mostrarMensajeEstado('success', `Usuario ${nombreUsuario} registrado.`);
+                formularioRegistro.classList.add('d-none'); 
+                if (document.getElementById('resultado-identificacion')) {
+                    document.getElementById('resultado-identificacion').innerHTML = `<i class="fas fa-user-plus me-1"></i> Usuario <strong>${nombreUsuario}</strong> registrado.`;
+                    document.getElementById('resultado-identificacion').classList.remove('d-none', 'alert-danger');
+                    document.getElementById('resultado-identificacion').classList.add('alert-success');
+                }
+            } else {
+                mostrarMensajeModal('Registro Fallido', `No se pudo registrar a "${nombreUsuario}". Inténtalo de nuevo.`, false);
+                mostrarMensajeEstado('danger', `Fallo al registrar usuario ${nombreUsuario}.`);
+            }
+        }, 3000); 
+    };
+
+    document.getElementById('btn-cancelar-registro').onclick = function() {
+        formularioRegistro.classList.add('d-none');
+        document.getElementById('nombre-usuario').value = '';
+        mostrarMensajeModal('Cancelado', 'Registro de usuario cancelado.', false);
+        mostrarMensajeEstado('info', 'Registro de usuario cancelado.');
+    };
+}
+
+
+// Funciones específicas del Dashboard
+function inicializarGraficos() {
+    // Solo inicializa los gráficos si los elementos existen en el DOM (es decir, estamos en el dashboard)
+    const ctxActividad = document.getElementById('grafico-actividad');
+    const ctxEventos = document.getElementById('grafico-eventos');
+
+    if (ctxActividad) {
+        estadisticasChart = new Chart(ctxActividad.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                datasets: [{
+                    label: 'Conversaciones',
+                    data: [12, 19, 15, 17, 14, 20, 18], 
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: 'white'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: 'white' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    },
+                    y: {
+                        ticks: { color: 'white' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    }
+                }
+            }
+        });
+    }
+
+    if (ctxEventos) {
+        eventosChart = new Chart(ctxEventos.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Identificación Facial', 'Comandos de Voz', 'Análisis Comportamiento', 'Otros'],
+                datasets: [{
+                    data: [30, 40, 20, 10], 
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 205, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: 'white'
+                        }
+                    }
+                }
+            }
+        });
     }
 }
 
-/**
- * Actualizar indicadores visuales de estado
- */
-function actualizarIndicadoresEstado(componentes) {
-    if (!componentes) return;
+function actualizarGraficos(data) {
+    if (estadisticasChart && data.actividad_conversaciones_semanal && data.etiquetas_dias) {
+        estadisticasChart.data.labels = data.etiquetas_dias;
+        estadisticasChart.data.datasets[0].data = data.actividad_conversaciones_semanal;
+        estadisticasChart.update();
+    }
+
+    if (eventosChart && data.distribucion_eventos) {
+        eventosChart.data.datasets[0].data = [
+            data.distribucion_eventos.facial || 0,
+            data.distribucion_eventos.voz || 0,
+            data.distribucion_eventos.comportamiento || 0,
+            data.distribucion_eventos.otros || 0
+        ];
+        eventosChart.update();
+    }
+}
+
+function generarAnalisisComportamiento(userId) { 
+    const panel = document.getElementById('panel-analisis');
+    const contenido = document.getElementById('contenido-analisis');
     
-    const indicadores = {
-        'estado-voz': {
-            estado: componentes.voz_calibrado,
-            textoActivo: 'Calibrado',
-            textoInactivo: 'No Calibrado'
-        },
-        'estado-camara': {
-            estado: componentes.camara_inicializada,
-            textoActivo: 'Inicializada',
-            textoInactivo: 'No Inicializada'
-        },
-        'estado-modelos': {
-            estado: componentes.modelos_cargados,
-            textoActivo: 'Cargados',
-            textoInactivo: 'No Cargados'
-        },
-        'estado-activo': {
-            estado: componentes.sistema_activo,
-            textoActivo: 'Activo',
-            textoInactivo: 'Inactivo'
-        }
-    };
+    if (!panel || !contenido) {
+        console.warn('Elementos de análisis de comportamiento no encontrados.');
+        return;
+    }
+
+    if (!userId || userId === "placeholder_user_id" || userId.startsWith('{{')) { // Check for valid userId, including Jinja placeholder
+        mostrarMensajeEstado('warning', 'No hay usuario identificado para generar el análisis de comportamiento. Por favor, identifique un usuario en la página principal.');
+        panel.style.display = 'none'; // Hide panel if no valid user
+        return;
+    }
+
+    panel.style.display = 'block';
+    contenido.innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+            <p>Generando análisis de comportamiento...</p>
+        </div>
+    `;
     
-    Object.entries(indicadores).forEach(([id, config]) => {
-        const elemento = document.getElementById(id);
-        if (elemento) {
-            elemento.textContent = config.estado ? config.textoActivo : config.textoInactivo;
-            elemento.className = `badge ${config.estado ? 'bg-success' : 'bg-danger'}`;
+    fetch(`${BASE_API_URL}/api/analisis_comportamiento/${userId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                contenido.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                mostrarMensajeEstado('danger', 'Error al generar análisis: ' + data.error);
+                return;
+            }
+            
+            contenido.innerHTML = `
+                <div class="alert alert-info">
+                    <pre style="white-space: pre-wrap; margin: 0;">${data.analisis || 'Análisis no disponible.'}</pre>
+                </div>
+            `;
+            mostrarMensajeEstado('success', 'Análisis de comportamiento generado correctamente.');
+        })
+        .catch(error => {
+            contenido.innerHTML = `<div class="alert alert-danger">Error al obtener análisis: ${error.message}</div>`;
+            mostrarMensajeEstado('danger', 'Error de conexión al obtener análisis: ' + error.message);
+        });
+}
+
+function crearBackup() {
+    mostrarMensajeModal('Confirmación', '¿Crear backup del sistema? Esto puede tomar unos momentos.', true, function(confirmado) {
+        if (confirmado) {
+            fetch(`${BASE_API_URL}/api/backup_sistema`, { method: 'POST' }) 
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        mostrarMensajeModal('Éxito', 'Backup creado exitosamente');
+                        mostrarMensajeEstado('success', 'Backup creado exitosamente.');
+                    } else {
+                        mostrarMensajeModal('Error', 'Error creando backup: ' + (data.error || 'Error desconocido'));
+                        mostrarMensajeEstado('danger', 'Error creando backup: ' + (data.error || 'Error desconocido'));
+                    }
+                })
+                .catch(error => {
+                    mostrarMensajeModal('Error', 'Error de red: ' + error.message);
+                    mostrarMensajeEstado('danger', 'Error de conexión al crear backup: ' + error.message);
+                });
         }
     });
 }
 
+function limpiarDatos() {
+    mostrarMensajeModal('Limpiar Datos', '¿Cuántos días de datos mantener? (por defecto 30): <input type="number" id="input-dias-limpiar" class="form-control mt-2" value="30">', true, function(confirmado, inputValor) {
+        if (confirmado) {
+            const dias = parseInt(inputValor || '30');
+            if (isNaN(dias)) {
+                mostrarMensajeModal('Advertencia', 'Por favor, introduce un número válido de días.');
+                return;
+            }
+
+            mostrarMensajeModal('Confirmación de Limpieza', `¿Estás seguro de eliminar datos anteriores a ${dias} días? Esta acción es irreversible.`, true, function(confirmadoFinal) {
+                if (confirmadoFinal) {
+                    fetch(`${BASE_API_URL}/api/limpiar_datos`, { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ dias: dias })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            mostrarMensajeModal('Éxito', 'Datos limpiados exitosamente');
+                            mostrarMensajeEstado('success', 'Datos limpiados exitosamente.');
+                            obtenerYActualizarTodo(); 
+                        } else {
+                            mostrarMensajeModal('Error', 'Error: ' + (data.error || 'Error desconocido'));
+                            mostrarMensajeEstado('danger', 'Error al limpiar datos: ' + (data.error || 'Error desconocido'));
+                        }
+                    })
+                    .catch(error => {
+                        mostrarMensajeModal('Error', 'Error de red: ' + error.message);
+                        mostrarMensajeEstado('danger', 'Error de conexión al limpiar datos: ' + error.message);
+                    });
+                }
+            });
+        }
+    }, true); 
+
+}
+
+function abrirConfiguracion() {
+    const modal = new bootstrap.Modal(document.getElementById('modal-configuracion'));
+    modal.show();
+    // Initialize slider values on modal open
+    const umbralFacial = document.getElementById('umbral-facial');
+    const valorFacial = document.getElementById('valor-facial');
+    const umbralVoz = document.getElementById('umbral-voz');
+    const valorVoz = document.getElementById('valor-voz');
+    
+    if (umbralFacial && valorFacial) {
+        umbralFacial.addEventListener('input', function() {
+            valorFacial.textContent = this.value;
+        });
+        valorFacial.textContent = umbralFacial.value; // Set initial value
+    }
+
+    if (umbralVoz && valorVoz) {
+        umbralVoz.addEventListener('input', function() {
+            valorVoz.textContent = this.value;
+        });
+        valorVoz.textContent = umbralVoz.value; // Set initial value
+    }
+}
+
+
+function guardarConfiguracion() {
+    const config = {
+        umbral_confianza_facial: parseFloat(document.getElementById('umbral-facial').value),
+        umbral_confianza_voz: parseFloat(document.getElementById('umbral-voz').value),
+        tiempo_espera_comando: parseInt(document.getElementById('tiempo-espera').value),
+        palabra_activacion: document.getElementById('palabra-activacion').value,
+        modo_debug: document.getElementById('modo-debug').checked
+    };
+    
+    fetch(`${BASE_API_URL}/api/configurar_sistema`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            mostrarMensajeModal('Éxito', 'Configuración guardada exitosamente');
+            mostrarMensajeEstado('success', 'Configuración guardada exitosamente.');
+            bootstrap.Modal.getInstance(document.getElementById('modal-configuracion')).hide();
+        } else {
+            mostrarMensajeModal('Error', 'Error: ' + (data.error || 'Error desconocido'));
+            mostrarMensajeEstado('danger', 'Error al guardar configuración: ' + (data.error || 'Error desconocido'));
+        }
+    })
+    .catch(error => {
+        mostrarMensajeModal('Error', 'Error de red: ' + error.message);
+        mostrarMensajeEstado('danger', 'Error de conexión al guardar configuración: ' + error.message);
+    });
+}
+
+function cargarEventosRecientes(eventos_log) {
+    const logContainer = document.getElementById('log-eventos');
+    if (!logContainer) { 
+        console.warn('Contenedor de log de eventos no encontrado.');
+        return;
+    }
+    logContainer.innerHTML = ''; 
+
+    if (eventos_log && eventos_log.length > 0) {
+        eventos_log.forEach(event => {
+            const iconClass = event.tipo === 'info' ? 'fas fa-info-circle text-info' :
+                              event.tipo === 'success' ? 'fas fa-user-check text-success' :
+                              event.tipo === 'warning' ? 'fas fa-chart-line text-warning' :
+                              'fas fa-question-circle text-muted'; 
+            logContainer.innerHTML += `
+                <div class="border-bottom pb-2 mb-2">
+                    <i class="${iconClass} me-2"></i>
+                    <span class="text-muted">${new Date(event.timestamp).toLocaleString()}</span> - 
+                    ${event.mensaje}
+                </div>
+            `;
+        });
+    } else {
+        logContainer.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-clock me-2"></i>
+                No hay eventos recientes disponibles.
+            </div>
+        `;
+    }
+}
+
+
+// Funciones para reemplazar alert/confirm con modales de Bootstrap (compartido)
+function mostrarMensajeModal(titulo, mensaje, esConfirmacion = false, callback = null, tieneInput = false) {
+    const modalHtml = `
+        <div class="modal fade" id="customMessageModal" tabindex="-1" aria-labelledby="customMessageModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="customMessageModalLabel">${titulo}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>${mensaje}</p>
+                        ${tieneInput ? '<input type="text" id="modalInput" class="form-control mt-3">' : ''}
+                    </div>
+                    <div class="modal-footer">
+                        ${esConfirmacion ? '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>' : ''}
+                        <button type="button" class="btn btn-primary" id="modalConfirmBtn">Aceptar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const existingModal = document.getElementById('customMessageModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modalElement = new bootstrap.Modal(document.getElementById('customMessageModal'));
+    modalElement.show();
+
+    document.getElementById('modalConfirmBtn').onclick = function() {
+        const inputValue = tieneInput ? document.getElementById('modalInput').value : null;
+        modalElement.hide();
+        if (callback) {
+            callback(true, inputValue);
+        }
+    };
+
+    if (esConfirmacion) {
+        document.getElementById('customMessageModal').addEventListener('hidden.bs.modal', function (event) {
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            if (callback && confirmBtn && !confirmBtn.clicked) { 
+                callback(false);
+            }
+            if (confirmBtn) { 
+                delete confirmBtn.clicked;
+            }
+        }, { once: true });
+        document.getElementById('modalConfirmBtn').addEventListener('click', function() {
+            this.clicked = true;
+        }, { once: true });
+    }
+}
+
+
+// --- Nueva función para inicializar la página del Dashboard ---
+function initializeDashboardPage(api_url, currentUserId) {
+    // Estas variables globales ya se definen al inicio de script.js.
+    // Solo nos aseguramos de que el contexto de la URL sea el mismo si se sobrescribe aquí.
+    // Esto es más para referencia, ya que BASE_API_URL ya es global.
+    // const BASE_API_URL_DASHBOARD = api_url;
+    
+    // Inicializar elementos específicos del dashboard
+    inicializarGraficos(); 
+    obtenerYActualizarTodo(); // Llama a la función principal para cargar datos y actualizar UI
+
+    // Asignar userId para funciones que lo necesiten, como generarAnalisisComportamiento
+    // No hace falta una variable global si se pasa directamente o se reasigna la globalmente si es necesario
+    
+    // Vincular event listeners específicos del dashboard
+    const umbralFacial = document.getElementById('umbral-facial');
+    const valorFacial = document.getElementById('valor-facial');
+    const umbralVoz = document.getElementById('umbral-voz');
+    const valorVoz = document.getElementById('valor-voz');
+    
+    if (umbralFacial && valorFacial) {
+        umbralFacial.addEventListener('input', function() {
+            valorFacial.textContent = this.value;
+        });
+    }
+    if (umbralVoz && valorVoz) {
+        umbralVoz.addEventListener('input', function() {
+            valorVoz.textContent = this.value;
+        });
+    }
+
+    // Vincula el botón de Análisis de Comportamiento pasando el userId
+    const btnAnalisis = document.querySelector('.btn[onclick="generarAnalisisComportamiento()"]');
+    if (btnAnalisis) {
+        btnAnalisis.onclick = function() {
+            generarAnalisisComportamiento(currentUserId);
+        };
+    }
+
+    // Vincular otros botones de control del sistema
+    document.querySelector('.btn[onclick="actualizarEstadisticas()"]')?.addEventListener('click', obtenerYActualizarTodo);
+    document.querySelector('.btn[onclick="crearBackup()"]')?.addEventListener('click', crearBackup);
+    document.querySelector('.btn[onclick="limpiarDatos()"]')?.addEventListener('click', limpiarDatos);
+    document.querySelector('.btn[onclick="abrirConfiguracion()"]')?.addEventListener('click', abrirConfiguracion);
+    document.querySelector('.btn[onclick="guardarConfiguracion()"]')?.addEventListener('click', guardarConfiguracion);
+
+
+    // Establecer un intervalo para actualizar automáticamente (ej. cada 30 segundos)
+    setInterval(obtenerYActualizarTodo, 30000); // 30 segundos
+}
+
+
+// Event listener para cuando el DOM esté completamente cargado
+document.addEventListener('DOMContentLoaded', function() {
+    // Determinar qué página es y ejecutar la inicialización apropiada
+    // Comprueba si existen elementos específicos de index.html (como el campo de chat)
+    if (document.getElementById('input-mensaje')) { 
+        // Lógica de inicialización para index.html
+        document.getElementById('btn-identificar')?.addEventListener('click', identificarUsuario);
+        document.getElementById('btn-registrar')?.addEventListener('click', registrarNuevoUsuario);
+        document.getElementById('btn-enviar')?.addEventListener('click', enviarMensaje);
+        document.getElementById('input-mensaje')?.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                enviarMensaje();
+            }
+        });
+        document.getElementById('btn-voz')?.addEventListener('click', comandoVoz);
+
+        // Añadir contenedor de mensaje de estado si no existe (para index.html)
+        if (!document.getElementById('status-message')) {
+            const navBar = document.querySelector('nav'); 
+            if (navBar) {
+                const statusMessageHtml = `
+                    <div id="status-message" class="alert alert-info d-none mb-4" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <span id="status-text"></span>
+                    </div>
+                `;
+                navBar.insertAdjacentHTML('afterend', statusMessageHtml);
+            }
+        }
+        obtenerYActualizarTodo(); // Inicializa datos para index.html
+        setInterval(obtenerYActualizarTodo, 30000); // Auto-actualiza para index.html
+
+    } 
+    // La inicialización del dashboard se hará mediante una llamada desde dashboard.html
+    // utilizando initializeDashboardPage() para pasar las variables de Jinja.
+});
+// --- script.js para index.html y dashboard.html ---
+
+// --- ¡IMPORTANTE! PEGA AQUÍ LA URL PUBLICA DE CLOUDFLARE TUNNEL QUE TE DIO COLAB!
+// DEBERÁ SER ALGO COMO 'https://xxxxxxxxxxxx.trycloudflare.com' O 'https://tuapp.tudominio.com'
+const BASE_API_URL = 'https://TU_URL_DE_CLOUDFLARE_TUNNEL_AQUI'; // <--- ¡CAMBIA ESTO CON LA URL ACTIVA DE TU COLAB!
+// --------------------------------------------------------------------------
+
+// Variables globales para gráficos (necesarias para actualizar desde diferentes funciones)
+let estadisticasChart = null;
+let eventosChart = null;
+
 /**
- * Cargar estadísticas del sistema
+ * Muestra un mensaje de estado en la parte superior de la página.
+ * NOTA: Esta función requiere un div en el HTML con id="status-message" y un span con id="status-text"
+ * para mostrar los mensajes. Y también necesita el icono 'i' dentro de status-message.
+ * Ej: <div id="status-message" class="alert d-none" role="alert"><i class="me-2"></i><span id="status-text"></span></div>
+ * @param {string} tipo - 'success', 'danger', 'warning', 'info'
+ * @param {string} mensaje - El texto del mensaje.
  */
-async function cargarEstadisticas() {
-    try {
-        const response = await fetch('/api/obtener_estadisticas');
-        const data = await response.json();
-        
-        if (data.error) {
-            console.error('Error obteniendo estadísticas:', data.error);
+function mostrarMensajeEstado(tipo, mensaje) {
+    const statusMessageDiv = document.getElementById('status-message');
+    const statusTextSpan = document.getElementById('status-text');
+    const iconElement = statusMessageDiv ? statusMessageDiv.querySelector('i') : null; // Get icon element
+
+    if (statusMessageDiv && statusTextSpan) {
+        statusMessageDiv.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning', 'alert-info');
+        if (iconElement) {
+            iconElement.className = ''; // Reset icon
+        }
+
+        statusMessageDiv.classList.add(`alert-${tipo}`);
+        statusTextSpan.textContent = mensaje;
+
+        if (iconElement) { // Add icon based on type
+            switch (tipo) {
+                case 'success':
+                    iconElement.classList.add('fas', 'fa-check-circle');
+                    break;
+                case 'danger':
+                    iconElement.classList.add('fas', 'fa-exclamation-triangle');
+                    break;
+                case 'warning':
+                    iconElement.classList.add('fas', 'fa-exclamation-circle');
+                    break;
+                case 'info':
+                default:
+                    iconElement.classList.add('fas', 'fa-info-circle');
+                    break;
+            }
+            iconElement.classList.add('me-2'); // Add margin right to icon
+        }
+
+        // Ocultar el mensaje después de un tiempo
+        setTimeout(() => {
+            statusMessageDiv.classList.add('d-none');
+        }, 5000); // 5 segundos
+    } else {
+        console.warn('Elementos de mensaje de estado no encontrados. No se puede mostrar el mensaje en la UI:', mensaje);
+    }
+}
+
+
+// Función para actualizar los elementos del DOM relacionados con el estado del sistema (usado en index.html)
+function actualizarEstadoSistemaUI(data) {
+    if (document.getElementById('estado-voz')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-voz').textContent = data.estado_voz ? (data.estado_voz.calibrado ? 'Activo' : 'Inactivo') : 'N/A';
+        document.getElementById('estado-voz').className = `badge ${data.estado_voz && data.estado_voz.calibrado ? 'bg-success' : 'bg-danger'}`;
+    }
+    if (document.getElementById('estado-camara')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-camara').textContent = data.estado_facial ? (data.estado_facial.inicializado ? 'Activa' : 'Inactiva') : 'N/A';
+        document.getElementById('estado-camara').className = `badge ${data.estado_facial && data.estado_facial.inicializado ? 'bg-success' : 'bg-danger'}`;
+    }
+    if (document.getElementById('estado-modelos')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-modelos').textContent = data.modelos_ia ? (data.modelos_ia.cargados ? 'Cargados' : 'Fallidos') : 'N/A';
+        document.getElementById('estado-modelos').className = `badge ${data.modelos_ia && data.modelos_ia.cargados ? 'bg-success' : 'bg-danger'}`;
+    } else if (document.getElementById('estado-modelos')) { // Fallback if no specific models_ia field
+        document.getElementById('estado-modelos').textContent = data.estado_general === 'online' ? 'Cargados' : 'Inactivos';
+        document.getElementById('estado-modelos').className = `badge ${data.estado_general === 'online' ? 'bg-success' : 'bg-danger'}`;
+    }
+
+    if (document.getElementById('estado-activo')) { // Check if this element exists (likely index.html)
+        document.getElementById('estado-activo').textContent = data.estado_general === 'online' ? 'Sí' : 'No';
+        document.getElementById('estado-activo').className = `badge ${data.estado_general === 'online' ? 'bg-success' : 'bg-danger'}`;
+    }
+
+    const estadoUsuarioNav = document.getElementById('estado-usuario');
+    if (estadoUsuarioNav) { // Check if nav user status exists
+        if (data.usuario_actual && data.usuario_actual.nombre) {
+            estadoUsuarioNav.innerHTML = `<i class="fas fa-user-check me-1"></i> ${data.usuario_actual.nombre} (${(data.usuario_actual.confianza * 100).toFixed(1)}%)`;
+            estadoUsuarioNav.className = 'nav-link text-success';
+        } else {
+            estadoUsuarioNav.innerHTML = `<i class="fas fa-user-slash me-1"></i> No identificado`;
+            estadoUsuarioNav.className = 'nav-link text-muted';
+        }
+    }
+}
+
+// Función para actualizar las estadísticas rápidas en la parte inferior de index.html
+function actualizarEstadisticasRapidas(data) {
+    if (document.getElementById('stat-usuarios')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-usuarios').textContent = data.total_usuarios || 0;
+    }
+    if (document.getElementById('stat-conversaciones')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-conversaciones').textContent = data.conversaciones_hoy || 0;
+    }
+    if (document.getElementById('stat-uptime')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-uptime').textContent = (data.horas_activo || 0).toFixed(1);
+    }
+    if (document.getElementById('stat-eventos')) { // Check if this element exists (likely index.html)
+        document.getElementById('stat-eventos').textContent = data.eventos_sistema || 0;
+    }
+}
+
+// Función para actualizar los elementos del DOM con los datos de estadísticas (usado en dashboard.html)
+function actualizarElementosEstadisticasDashboard(data) {
+    if (document.getElementById('stat-usuarios-dashboard')) { // Check if this element exists (likely dashboard.html)
+        document.getElementById('stat-usuarios-dashboard').textContent = data.total_usuarios || 0;
+    }
+    if (document.getElementById('stat-conversaciones-dashboard')) {
+        document.getElementById('stat-conversaciones-dashboard').textContent = data.conversaciones_hoy || 0;
+    }
+    if (document.getElementById('stat-uptime-dashboard')) {
+        document.getElementById('stat-uptime-dashboard').textContent = (data.horas_activo || 0).toFixed(1);
+    }
+    if (document.getElementById('stat-eventos-dashboard')) {
+        document.getElementById('stat-eventos-dashboard').textContent = data.eventos_sistema || 0;
+    }
+
+    // Actualizar estado de voz (dashboard specific)
+    if (document.getElementById('estado-voz-calibrado') && data.estado_voz) {
+        const vozCalibrado = document.getElementById('estado-voz-calibrado');
+        vozCalibrado.textContent = data.estado_voz.calibrado ? 'Calibrado' : 'No Calibrado';
+        vozCalibrado.className = `badge ${data.estado_voz.calibrado ? 'bg-success' : 'bg-danger'}`;
+        document.getElementById('umbral-energia-voz').textContent = data.estado_voz.energy_threshold || 'N/A';
+        document.getElementById('umbral-pausa-voz').textContent = data.estado_voz.pause_threshold || 'N/A';
+        document.getElementById('dispositivo-voz').textContent = data.estado_voz.dispositivo_activo || 'N/A';
+        const vozEscuchando = document.getElementById('escucha-continua-voz');
+        vozEscuchando.textContent = data.estado_voz.escuchando_continuo ? 'Activa' : 'Inactiva';
+        vozEscuchando.className = `badge ${data.estado_voz.escuchando_continuo ? 'bg-success' : 'bg-secondary'}`;
+    }
+
+    // Actualizar estado facial (dashboard specific)
+    if (document.getElementById('estado-facial-inicializado') && data.estado_facial) {
+        const facialInicializado = document.getElementById('estado-facial-inicializado');
+        facialInicializado.textContent = data.estado_facial.inicializado ? 'Inicializado' : 'No Inicializado';
+        facialInicializado.className = `badge ${data.estado_facial.inicializado ? 'bg-success' : 'bg-danger'}`;
+        document.getElementById('camara-facial').textContent = data.estado_facial.camara_activa || 'N/A';
+        if (data.estado_facial.resolucion) {
+            document.getElementById('resolucion-facial').textContent = `${data.estado_facial.resolucion[0]}x${data.estado_facial.resolucion[1]}`;
+        } else {
+            document.getElementById('resolucion-facial').textContent = 'N/A';
+        }
+        document.getElementById('fps-facial').textContent = data.estado_facial.fps || 'N/A';
+        document.getElementById('modelo-facial').textContent = data.estado_facial.modelo_deteccion || 'N/A';
+        const facialCapturando = document.getElementById('capturando-facial');
+        facialCapturando.textContent = data.estado_facial.capturando ? 'Activo' : 'Inactiva';
+        facialCapturando.className = `badge ${data.estado_facial.capturando ? 'bg-success' : 'bg-secondary'}`;
+    }
+
+    // Actualizar análisis de comportamiento (dashboard specific)
+    if (document.getElementById('usuarios-analisis') && data.analisis_comportamiento) {
+        document.getElementById('usuarios-analisis').textContent = data.analisis_comportamiento.usuarios_con_analisis || 0;
+        document.getElementById('interacciones-totales').textContent = data.analisis_comportamiento.interacciones_totales || 0;
+        document.getElementById('usuarios-activos-7d').textContent = data.analisis_comportamiento.usuarios_activos_ultima_semana || 0;
+        document.getElementById('patrones-detectados').textContent = data.analisis_comportamiento.patrones_detectados || 0;
+    }
+}
+
+
+// Función principal para obtener y actualizar todos los datos de estado/estadísticas
+function obtenerYActualizarTodo() {
+    fetch(`${BASE_API_URL}/api/obtener_estadisticas`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                console.error('Error al obtener estadísticas:', data.error);
+                mostrarMensajeEstado('danger', 'No se pudieron cargar las estadísticas del sistema: ' + data.error);
+                return;
+            }
+            // Logic for index.html elements
+            actualizarEstadoSistemaUI(data);
+            actualizarEstadisticasRapidas(data);
+
+            // Logic for dashboard.html elements (only if they exist on the page)
+            actualizarElementosEstadisticasDashboard(data);
+            actualizarGraficos(data); // This assumes charts are initialized in dashboard context
+            if (document.getElementById('log-eventos')) { // Check if log events container exists
+                cargarEventosRecientes(data.eventos_log);
+            }
+
+            mostrarMensajeEstado('success', 'Estado del sistema actualizado.');
+        })
+        .catch(error => {
+            console.error('Error de red al obtener estadísticas:', error);
+            mostrarMensajeEstado('danger', 'Error de conexión: No se pudo conectar con el backend de la IA. Asegúrate de que el cuaderno de Colab esté ejecutándose y la URL de ngrok/Cloudflare sea correcta.');
+        });
+}
+
+
+// Función para enviar un mensaje al asistente IA (usado en index.html)
+function enviarMensaje() {
+    const inputMensaje = document.getElementById('input-mensaje');
+    const areaMensajes = document.getElementById('area-mensajes');
+    const indicadorEscritura = document.getElementById('indicador-escritura');
+
+    if (!inputMensaje || !areaMensajes || !indicadorEscritura) { // Check if elements exist
+        console.warn('Elementos de chat no encontrados. No se puede enviar mensaje.');
+        return;
+    }
+
+    const mensajeUsuario = inputMensaje.value.trim();
+    if (mensajeUsuario === '') {
+        return; 
+    }
+
+    areaMensajes.innerHTML += `
+        <div class="mensaje-usuario text-end mb-2">
+            <span class="badge bg-primary p-2 rounded-pill">${mensajeUsuario}</span>
+        </div>
+    `;
+    inputMensaje.value = ''; 
+    areaMensajes.scrollTop = areaMensajes.scrollHeight; 
+
+    indicadorEscritura.classList.remove('d-none'); 
+
+    fetch(`${BASE_API_URL}/api/comando_ia`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ comando: mensajeUsuario })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        indicadorEscritura.classList.add('d-none'); 
+
+        const respuestaIA = data.respuesta_texto || "Lo siento, no pude procesar tu solicitud.";
+        areaMensajes.innerHTML += `
+            <div class="mensaje-sistema text-start mb-2">
+                <span class="badge bg-success p-2 rounded-pill">${respuestaIA}</span>
+            </div>
+        `;
+        areaMensajes.scrollTop = areaMensajes.scrollHeight; 
+
+        if (data.url_audio) {
+            const audio = new Audio(data.url_audio);
+            audio.play().catch(e => console.error("Error al reproducir audio:", e));
+        }
+        mostrarMensajeEstado('success', 'Mensaje enviado y recibido por la IA.');
+    })
+    .catch(error => {
+        indicadorEscritura.classList.add('d-none'); 
+        console.error('Error al enviar mensaje a la IA:', error);
+        areaMensajes.innerHTML += `
+            <div class="mensaje-sistema text-start mb-2">
+                <span class="badge bg-danger p-2 rounded-pill">Error: No se pudo conectar con el asistente.</span>
+            </div>
+        `;
+        areaMensajes.scrollTop = areaMensajes.scrollHeight;
+        mostrarMensajeEstado('danger', 'Error de conexión: No se pudo conectar con el asistente IA. Verifica el backend.');
+    });
+}
+
+// Función para manejar el comando de voz (placeholder, usado en index.html)
+function comandoVoz() {
+    mostrarMensajeModal('Función de Voz', 'La funcionalidad de reconocimiento de voz está en desarrollo. ¡Pronto podrás hablar con Nyra!', false);
+}
+
+// Funciones para Identificación y Registro (simuladas con modales, usado en index.html)
+function identificarUsuario() {
+    mostrarMensajeModal('Identificación de Usuario', 'Simulando identificación facial. Esto podría tomar unos segundos.', false);
+    setTimeout(() => {
+        const isIdentified = Math.random() > 0.5; 
+        if (isIdentified) {
+            const nombre = "Usuario Demo";
+            const id = "USER-12345";
+            const confianza = (0.7 + Math.random() * 0.3).toFixed(2); 
+            mostrarMensajeModal('Identificación Exitosa', `¡Bienvenido, ${nombre}! Confianza: ${(confianza * 100).toFixed(1)}%.`, false);
+            mostrarMensajeEstado('success', `Usuario ${nombre} identificado correctamente.`);
+            if (document.getElementById('estado-usuario')) {
+                document.getElementById('estado-usuario').innerHTML = `<i class="fas fa-user-check me-1"></i> ${nombre} (${(confianza * 100).toFixed(1)}%)`;
+                document.getElementById('estado-usuario').className = 'nav-link text-success';
+            }
+            if (document.getElementById('resultado-identificacion')) {
+                document.getElementById('resultado-identificacion').innerHTML = `<i class="fas fa-check-circle me-1"></i> Usuario identificado: <strong>${nombre}</strong>`;
+                document.getElementById('resultado-identificacion').classList.remove('d-none', 'alert-danger');
+                document.getElementById('resultado-identificacion').classList.add('alert-success');
+            }
+        } else {
+            mostrarMensajeModal('Identificación Fallida', 'No se pudo identificar al usuario. Inténtalo de nuevo.', false);
+            mostrarMensajeEstado('danger', 'Fallo en la identificación de usuario.');
+            if (document.getElementById('resultado-identificacion')) {
+                document.getElementById('resultado-identificacion').innerHTML = `<i class="fas fa-times-circle me-1"></i> No se pudo identificar al usuario.`;
+                document.getElementById('resultado-identificacion').classList.remove('d-none', 'alert-success');
+                document.getElementById('resultado-identificacion').classList.add('alert-danger');
+            }
+        }
+    }, 2000); 
+}
+
+function registrarNuevoUsuario() {
+    const formularioRegistro = document.getElementById('formulario-registro');
+    if (!formularioRegistro) {
+        console.warn('Formulario de registro no encontrado.');
+        return;
+    }
+    formularioRegistro.classList.remove('d-none');
+    if (document.getElementById('resultado-identificacion')) {
+        document.getElementById('resultado-identificacion').classList.add('d-none'); // Ocultar mensaje anterior
+    }
+
+    document.getElementById('btn-confirmar-registro').onclick = function() {
+        const nombreUsuario = document.getElementById('nombre-usuario').value.trim();
+        if (nombreUsuario === '') {
+            mostrarMensajeModal('Advertencia', 'Por favor, introduce un nombre para el registro.', false);
             return;
         }
         
-        // Actualizar estadísticas en la página principal
-        const estadisticas = data.sistema || {};
-        
-        const elementos = {
-            'stat-usuarios': estadisticas.total_usuarios || 0,
-            'stat-conversaciones': estadisticas.conversaciones_hoy || 0,
-            'stat-uptime': (estadisticas.uptime_horas || 0).toFixed(1),
-            'stat-eventos': estadisticas.eventos_sistema || 0
-        };
-        
-        Object.entries(elementos).forEach(([id, valor]) => {
-            const elemento = document.getElementById(id);
-            if (elemento) {
-                // Animación de cambio de número
-                animarCambioNumero(elemento, valor);
+        mostrarMensajeModal('Registro de Usuario', `Registrando a "${nombreUsuario}". Esto tomará unos momentos.`, false);
+        setTimeout(() => {
+            const isRegistered = Math.random() > 0.3; 
+            if (isRegistered) {
+                mostrarMensajeModal('Registro Exitoso', `¡Usuario "${nombreUsuario}" registrado con éxito!`, false);
+                mostrarMensajeEstado('success', `Usuario ${nombreUsuario} registrado.`);
+                formularioRegistro.classList.add('d-none'); 
+                if (document.getElementById('resultado-identificacion')) {
+                    document.getElementById('resultado-identificacion').innerHTML = `<i class="fas fa-user-plus me-1"></i> Usuario <strong>${nombreUsuario}</strong> registrado.`;
+                    document.getElementById('resultado-identificacion').classList.remove('d-none', 'alert-danger');
+                    document.getElementById('resultado-identificacion').classList.add('alert-success');
+                }
+            } else {
+                mostrarMensajeModal('Registro Fallido', `No se pudo registrar a "${nombreUsuario}". Inténtalo de nuevo.`, false);
+                mostrarMensajeEstado('danger', `Fallo al registrar usuario ${nombreUsuario}.`);
+            }
+        }, 3000); 
+    };
+
+    document.getElementById('btn-cancelar-registro').onclick = function() {
+        formularioRegistro.classList.add('d-none');
+        document.getElementById('nombre-usuario').value = '';
+        mostrarMensajeModal('Cancelado', 'Registro de usuario cancelado.', false);
+        mostrarMensajeEstado('info', 'Registro de usuario cancelado.');
+    };
+}
+
+
+// Funciones específicas del Dashboard
+function inicializarGraficos() {
+    // Solo inicializa los gráficos si los elementos existen en el DOM (es decir, estamos en el dashboard)
+    const ctxActividad = document.getElementById('grafico-actividad');
+    const ctxEventos = document.getElementById('grafico-eventos');
+
+    if (ctxActividad) {
+        estadisticasChart = new Chart(ctxActividad.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                datasets: [{
+                    label: 'Conversaciones',
+                    data: [12, 19, 15, 17, 14, 20, 18], 
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: 'white'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: 'white' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    },
+                    y: {
+                        ticks: { color: 'white' },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    }
+                }
             }
         });
-        
-    } catch (error) {
-        console.error('❌ Error cargando estadísticas:', error);
     }
-}
 
-/**
- * Animar cambio de número en elemento
- */
-function animarCambioNumero(elemento, valorFinal) {
-    const valorActual = parseFloat(elemento.textContent) || 0;
-    const diferencia = valorFinal - valorActual;
-    const duracion = 1000; // 1 segundo
-    const pasos = 20;
-    const incremento = diferencia / pasos;
-    let paso = 0;
-    
-    const intervalo = setInterval(() => {
-        paso++;
-        const valorTemp = valorActual + (incremento * paso);
-        
-        if (Number.isInteger(valorFinal)) {
-            elemento.textContent = Math.round(valorTemp);
-        } else {
-            elemento.textContent = valorTemp.toFixed(1);
-        }
-        
-        if (paso >= pasos) {
-            clearInterval(intervalo);
-            elemento.textContent = Number.isInteger(valorFinal) ? valorFinal : valorFinal.toFixed(1);
-        }
-    }, duracion / pasos);
-}
-
-/**
- * Mostrar notificación
- */
-function mostrarNotificacion(mensaje, tipo = 'info') {
-    // Crear elemento de notificación
-    const notificacion = document.createElement('div');
-    notificacion.className = `alert alert-${tipo} alert-dismissible fade show position-fixed`;
-    notificacion.style.cssText = `
-        top: 20px;
-        right: 20px;
-        z-index: 9999;
-        min-width: 300px;
-        max-width: 500px;
-    `;
-    
-    // Iconos según el tipo
-    const iconos = {
-        success: 'fas fa-check-circle',
-        error: 'fas fa-exclamation-triangle',
-        warning: 'fas fa-exclamation-circle',
-        info: 'fas fa-info-circle'
-    };
-    
-    notificacion.innerHTML = `
-        <i class="${iconos[tipo] || iconos.info} me-2"></i>
-        ${escapeHtml(mensaje)}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    // Agregar al DOM
-    document.body.appendChild(notificacion);
-    
-    // Remover automáticamente después de 5 segundos
-    setTimeout(() => {
-        if (notificacion.parentNode) {
-            notificacion.remove();
-        }
-    }, 5000);
-}
-
-/**
- * Escapar HTML para prevenir XSS
- */
-function escapeHtml(texto) {
-    const div = document.createElement('div');
-    div.textContent = texto;
-    return div.innerHTML;
-}
-
-/**
- * Formatear timestamp
- */
-function formatearTimestamp(timestamp) {
-    try {
-        const fecha = new Date(timestamp);
-        return fecha.toLocaleString('es-ES', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
+    if (ctxEventos) {
+        eventosChart = new Chart(ctxEventos.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Identificación Facial', 'Comandos de Voz', 'Análisis Comportamiento', 'Otros'],
+                datasets: [{
+                    data: [30, 40, 20, 10], 
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 205, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: 'white'
+                        }
+                    }
+                }
+            }
         });
-    } catch (error) {
-        return timestamp;
     }
 }
 
-/**
- * Validar entrada de texto
- */
-function validarTexto(texto, minLength = 1, maxLength = 1000) {
-    if (!texto || typeof texto !== 'string') {
-        return false;
+function actualizarGraficos(data) {
+    if (estadisticasChart && data.actividad_conversaciones_semanal && data.etiquetas_dias) {
+        estadisticasChart.data.labels = data.etiquetas_dias;
+        estadisticasChart.data.datasets[0].data = data.actividad_conversaciones_semanal;
+        estadisticasChart.update();
     }
+
+    if (eventosChart && data.distribucion_eventos) {
+        eventosChart.data.datasets[0].data = [
+            data.distribucion_eventos.facial || 0,
+            data.distribucion_eventos.voz || 0,
+            data.distribucion_eventos.comportamiento || 0,
+            data.distribucion_eventos.otros || 0
+        ];
+        eventosChart.update();
+    }
+}
+
+function generarAnalisisComportamiento(userId) { 
+    const panel = document.getElementById('panel-analisis');
+    const contenido = document.getElementById('contenido-analisis');
     
-    const textoLimpio = texto.trim();
-    return textoLimpio.length >= minLength && textoLimpio.length <= maxLength;
+    if (!panel || !contenido) {
+        console.warn('Elementos de análisis de comportamiento no encontrados.');
+        return;
+    }
+
+    if (!userId || userId === "placeholder_user_id" || userId.startsWith('{{')) { // Check for valid userId, including Jinja placeholder
+        mostrarMensajeEstado('warning', 'No hay usuario identificado para generar el análisis de comportamiento. Por favor, identifique un usuario en la página principal.');
+        panel.style.display = 'none'; // Hide panel if no valid user
+        return;
+    }
+
+    panel.style.display = 'block';
+    contenido.innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+            <p>Generando análisis de comportamiento...</p>
+        </div>
+    `;
+    
+    fetch(`${BASE_API_URL}/api/analisis_comportamiento/${userId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                contenido.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                mostrarMensajeEstado('danger', 'Error al generar análisis: ' + data.error);
+                return;
+            }
+            
+            contenido.innerHTML = `
+                <div class="alert alert-info">
+                    <pre style="white-space: pre-wrap; margin: 0;">${data.analisis || 'Análisis no disponible.'}</pre>
+                </div>
+            `;
+            mostrarMensajeEstado('success', 'Análisis de comportamiento generado correctamente.');
+        })
+        .catch(error => {
+            contenido.innerHTML = `<div class="alert alert-danger">Error al obtener análisis: ${error.message}</div>`;
+            mostrarMensajeEstado('danger', 'Error de conexión al obtener análisis: ' + error.message);
+        });
 }
 
-/**
- * Debounce function para limitar llamadas a APIs
- */
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
+function crearBackup() {
+    mostrarMensajeModal('Confirmación', '¿Crear backup del sistema? Esto puede tomar unos momentos.', true, function(confirmado) {
+        if (confirmado) {
+            fetch(`${BASE_API_URL}/api/backup_sistema`, { method: 'POST' }) 
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        mostrarMensajeModal('Éxito', 'Backup creado exitosamente');
+                        mostrarMensajeEstado('success', 'Backup creado exitosamente.');
+                    } else {
+                        mostrarMensajeModal('Error', 'Error creando backup: ' + (data.error || 'Error desconocido'));
+                        mostrarMensajeEstado('danger', 'Error creando backup: ' + (data.error || 'Error desconocido'));
+                    }
+                })
+                .catch(error => {
+                    mostrarMensajeModal('Error', 'Error de red: ' + error.message);
+                    mostrarMensajeEstado('danger', 'Error de conexión al crear backup: ' + error.message);
+                });
+        }
+    });
+}
+
+function limpiarDatos() {
+    mostrarMensajeModal('Limpiar Datos', '¿Cuántos días de datos mantener? (por defecto 30): <input type="number" id="input-dias-limpiar" class="form-control mt-2" value="30">', true, function(confirmado, inputValor) {
+        if (confirmado) {
+            const dias = parseInt(inputValor || '30');
+            if (isNaN(dias)) {
+                mostrarMensajeModal('Advertencia', 'Por favor, introduce un número válido de días.');
+                return;
+            }
+
+            mostrarMensajeModal('Confirmación de Limpieza', `¿Estás seguro de eliminar datos anteriores a ${dias} días? Esta acción es irreversible.`, true, function(confirmadoFinal) {
+                if (confirmadoFinal) {
+                    fetch(`${BASE_API_URL}/api/limpiar_datos`, { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ dias: dias })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            mostrarMensajeModal('Éxito', 'Datos limpiados exitosamente');
+                            mostrarMensajeEstado('success', 'Datos limpiados exitosamente.');
+                            obtenerYActualizarTodo(); 
+                        } else {
+                            mostrarMensajeModal('Error', 'Error: ' + (data.error || 'Error desconocido'));
+                            mostrarMensajeEstado('danger', 'Error al limpiar datos: ' + (data.error || 'Error desconocido'));
+                        }
+                    })
+                    .catch(error => {
+                        mostrarMensajeModal('Error', 'Error de red: ' + error.message);
+                        mostrarMensajeEstado('danger', 'Error de conexión al limpiar datos: ' + error.message);
+                    });
+                }
+            });
+        }
+    }, true); 
+
+}
+
+function abrirConfiguracion() {
+    const modal = new bootstrap.Modal(document.getElementById('modal-configuracion'));
+    modal.show();
+    // Initialize slider values on modal open
+    const umbralFacial = document.getElementById('umbral-facial');
+    const valorFacial = document.getElementById('valor-facial');
+    const umbralVoz = document.getElementById('umbral-voz');
+    const valorVoz = document.getElementById('valor-voz');
+    
+    if (umbralFacial && valorFacial) {
+        umbralFacial.addEventListener('input', function() {
+            valorFacial.textContent = this.value;
+        });
+        valorFacial.textContent = umbralFacial.value; // Set initial value
+    }
+
+    if (umbralVoz && valorVoz) {
+        umbralVoz.addEventListener('input', function() {
+            valorVoz.textContent = this.value;
+        });
+        valorVoz.textContent = umbralVoz.value; // Set initial value
+    }
+}
+
+
+function guardarConfiguracion() {
+    const config = {
+        umbral_confianza_facial: parseFloat(document.getElementById('umbral-facial').value),
+        umbral_confianza_voz: parseFloat(document.getElementById('umbral-voz').value),
+        tiempo_espera_comando: parseInt(document.getElementById('tiempo-espera').value),
+        palabra_activacion: document.getElementById('palabra-activacion').value,
+        modo_debug: document.getElementById('modo-debug').checked
     };
+    
+    fetch(`${BASE_API_URL}/api/configurar_sistema`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            mostrarMensajeModal('Éxito', 'Configuración guardada exitosamente');
+            mostrarMensajeEstado('success', 'Configuración guardada exitosamente.');
+            bootstrap.Modal.getInstance(document.getElementById('modal-configuracion')).hide();
+        } else {
+            mostrarMensajeModal('Error', 'Error: ' + (data.error || 'Error desconocido'));
+            mostrarMensajeEstado('danger', 'Error al guardar configuración: ' + (data.error || 'Error desconocido'));
+        }
+    })
+    .catch(error => {
+        mostrarMensajeModal('Error', 'Error de red: ' + error.message);
+        mostrarMensajeEstado('danger', 'Error de conexión al guardar configuración: ' + error.message);
+    });
 }
 
-/**
- * Función para manejar errores de red
- */
-function manejarErrorRed(error) {
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        return 'Error de conexión. Verifica tu conexión a internet.';
-    } else if (error.message.includes('500')) {
-        return 'Error interno del servidor. Inténtalo más tarde.';
-    } else if (error.message.includes('404')) {
-        return 'Servicio no encontrado. Contacta al administrador.';
+function cargarEventosRecientes(eventos_log) {
+    const logContainer = document.getElementById('log-eventos');
+    if (!logContainer) { 
+        console.warn('Contenedor de log de eventos no encontrado.');
+        return;
+    }
+    logContainer.innerHTML = ''; 
+
+    if (eventos_log && eventos_log.length > 0) {
+        eventos_log.forEach(event => {
+            const iconClass = event.tipo === 'info' ? 'fas fa-info-circle text-info' :
+                              event.tipo === 'success' ? 'fas fa-user-check text-success' :
+                              event.tipo === 'warning' ? 'fas fa-chart-line text-warning' :
+                              'fas fa-question-circle text-muted'; 
+            logContainer.innerHTML += `
+                <div class="border-bottom pb-2 mb-2">
+                    <i class="${iconClass} me-2"></i>
+                    <span class="text-muted">${new Date(event.timestamp).toLocaleString()}</span> - 
+                    ${event.mensaje}
+                </div>
+            `;
+        });
     } else {
-        return error.message || 'Error desconocido';
+        logContainer.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-clock me-2"></i>
+                No hay eventos recientes disponibles.
+            </div>
+        `;
     }
 }
 
-/**
- * Actualizar footer con timestamp actual
- */
-function actualizarTimestampFooter() {
-    const timestampFooter = document.getElementById('timestamp-footer');
-    if (timestampFooter) {
-        timestampFooter.textContent = formatearTimestamp(new Date().toISOString());
+
+// Funciones para reemplazar alert/confirm con modales de Bootstrap (compartido)
+function mostrarMensajeModal(titulo, mensaje, esConfirmacion = false, callback = null, tieneInput = false) {
+    const modalHtml = `
+        <div class="modal fade" id="customMessageModal" tabindex="-1" aria-labelledby="customMessageModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="customMessageModalLabel">${titulo}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>${mensaje}</p>
+                        ${tieneInput ? '<input type="text" id="modalInput" class="form-control mt-3">' : ''}
+                    </div>
+                    <div class="modal-footer">
+                        ${esConfirmacion ? '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>' : ''}
+                        <button type="button" class="btn btn-primary" id="modalConfirmBtn">Aceptar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const existingModal = document.getElementById('customMessageModal');
+    if (existingModal) {
+        existingModal.remove();
     }
-}
 
-// Actualizar timestamp del footer cada minuto
-setInterval(actualizarTimestampFooter, 60000);
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modalElement = new bootstrap.Modal(document.getElementById('customMessageModal'));
+    modalElement.show();
 
-/**
- * Función para obtener información del navegador (para debugging)
- */
-function obtenerInfoNavegador() {
-    return {
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-        platform: navigator.platform,
-        cookieEnabled: navigator.cookieEnabled,
-        onLine: navigator.onLine,
-        viewport: {
-            width: window.innerWidth,
-            height: window.innerHeight
+    document.getElementById('modalConfirmBtn').onclick = function() {
+        const inputValue = tieneInput ? document.getElementById('modalInput').value : null;
+        modalElement.hide();
+        if (callback) {
+            callback(true, inputValue);
         }
     };
+
+    if (esConfirmacion) {
+        document.getElementById('customMessageModal').addEventListener('hidden.bs.modal', function (event) {
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            if (callback && confirmBtn && !confirmBtn.clicked) { 
+                callback(false);
+            }
+            if (confirmBtn) { 
+                delete confirmBtn.clicked;
+            }
+        }, { once: true });
+        document.getElementById('modalConfirmBtn').addEventListener('click', function() {
+            this.clicked = true;
+        }, { once: true });
+    }
 }
 
-/**
- * Registrar evento para analytics (si se implementa en el futuro)
- */
-function registrarEvento(categoria, accion, etiqueta = '', valor = 0) {
-    // Placeholder para sistema de analytics futuro
-    console.log('📊 Evento registrado:', { categoria, accion, etiqueta, valor, timestamp: new Date().toISOString() });
+
+// --- Nueva función para inicializar la página del Dashboard ---
+function initializeDashboardPage(api_url, currentUserId) {
+    // Estas variables globales ya se definen al inicio de script.js.
+    // Solo nos aseguramos de que el contexto de la URL sea el mismo si se sobrescribe aquí.
+    // Esto es más para referencia, ya que BASE_API_URL ya es global.
+    // const BASE_API_URL_DASHBOARD = api_url;
+    
+    // Inicializar elementos específicos del dashboard
+    inicializarGraficos(); 
+    obtenerYActualizarTodo(); // Llama a la función principal para cargar datos y actualizar UI
+
+    // Asignar userId para funciones que lo necesiten, como generarAnalisisComportamiento
+    // No hace falta una variable global si se pasa directamente o se reasigna la globalmente si es necesario
+    
+    // Vincular event listeners específicos del dashboard
+    const umbralFacial = document.getElementById('umbral-facial');
+    const valorFacial = document.getElementById('valor-facial');
+    const umbralVoz = document.getElementById('umbral-voz');
+    const valorVoz = document.getElementById('valor-voz');
+    
+    if (umbralFacial && valorFacial) {
+        umbralFacial.addEventListener('input', function() {
+            valorFacial.textContent = this.value;
+        });
+    }
+    if (umbralVoz && valorVoz) {
+        umbralVoz.addEventListener('input', function() {
+            valorVoz.textContent = this.value;
+        });
+    }
+
+    // Vincula el botón de Análisis de Comportamiento pasando el userId
+    const btnAnalisis = document.querySelector('.btn[onclick="generarAnalisisComportamiento()"]');
+    if (btnAnalisis) {
+        btnAnalisis.onclick = function() {
+            generarAnalisisComportamiento(currentUserId);
+        };
+    }
+
+    // Vincular otros botones de control del sistema
+    document.querySelector('.btn[onclick="actualizarEstadisticas()"]')?.addEventListener('click', obtenerYActualizarTodo);
+    document.querySelector('.btn[onclick="crearBackup()"]')?.addEventListener('click', crearBackup);
+    document.querySelector('.btn[onclick="limpiarDatos()"]')?.addEventListener('click', limpiarDatos);
+    document.querySelector('.btn[onclick="abrirConfiguracion()"]')?.addEventListener('click', abrirConfiguracion);
+    document.querySelector('.btn[onclick="guardarConfiguracion()"]')?.addEventListener('click', guardarConfiguracion);
+
+
+    // Establecer un intervalo para actualizar automáticamente (ej. cada 30 segundos)
+    setInterval(obtenerYActualizarTodo, 30000); // 30 segundos
 }
 
-// Registrar eventos importantes
-document.addEventListener('DOMContentLoaded', () => {
-    registrarEvento('Sistema', 'Interfaz_Cargada', 'Web_Interface');
+
+// Event listener para cuando el DOM esté completamente cargado
+document.addEventListener('DOMContentLoaded', function() {
+    // Determinar qué página es y ejecutar la inicialización apropiada
+    // Comprueba si existen elementos específicos de index.html (como el campo de chat)
+    if (document.getElementById('input-mensaje')) { 
+        // Lógica de inicialización para index.html
+        document.getElementById('btn-identificar')?.addEventListener('click', identificarUsuario);
+        document.getElementById('btn-registrar')?.addEventListener('click', registrarNuevoUsuario);
+        document.getElementById('btn-enviar')?.addEventListener('click', enviarMensaje);
+        document.getElementById('input-mensaje')?.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                enviarMensaje();
+            }
+        });
+        document.getElementById('btn-voz')?.addEventListener('click', comandoVoz);
+
+        // Añadir contenedor de mensaje de estado si no existe (para index.html)
+        if (!document.getElementById('status-message')) {
+            const navBar = document.querySelector('nav'); 
+            if (navBar) {
+                const statusMessageHtml = `
+                    <div id="status-message" class="alert alert-info d-none mb-4" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <span id="status-text"></span>
+                    </div>
+                `;
+                navBar.insertAdjacentHTML('afterend', statusMessageHtml);
+            }
+        }
+        obtenerYActualizarTodo(); // Inicializa datos para index.html
+        setInterval(obtenerYActualizarTodo, 30000); // Auto-actualiza para index.html
+
+    } 
+    // La inicialización del dashboard se hará mediante una llamada desde dashboard.html
+    // utilizando initializeDashboardPage() para pasar las variables de Jinja.
 });
-
-window.addEventListener('beforeunload', () => {
-    registrarEvento('Sistema', 'Interfaz_Cerrada', 'Web_Interface');
-});
-
-// Exportar funciones para uso global si es necesario
-window.sistemaIA = {
-    enviarMensaje,
-    comandoVoz,
-    identificarUsuario,
-    mostrarNotificacion,
-    actualizarEstadoSistema,
-    cargarEstadisticas,
-    obtenerInfoNavegador,
-    registrarEvento
-};
-
-console.log('✅ Sistema JavaScript del Asistente IA cargado completamente');
