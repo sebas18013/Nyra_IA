@@ -3,18 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ sistema_nombre }}</title>
+    <title>{{ sistema_nombre }} v{{ sistema_version }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="style.css" rel="stylesheet"> <!-- Ruta corregida -->
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
 </head>
 <body class="bg-dark text-light">
-    <!-- Mensaje de estado general -->
-    <div id="status-message" class="alert alert-info d-none mb-4" role="alert">
-        <i class="fas fa-info-circle me-2"></i>
-        <span id="status-text"></span>
-    </div>
-
     <!-- Navegación -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
@@ -22,25 +16,22 @@
                 <i class="fas fa-robot me-2"></i>
                 {{ sistema_nombre }}
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="#">
-                            <i class="fas fa-home me-1"></i>
-                            Inicio
-                        </a>
+                        <a class="nav-link active" href="#inicio">Inicio</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="dashboard.html"> <!-- Ruta corregida -->
-                            <i class="fas fa-chart-line me-1"></i>
-                            Dashboard
-                        </a>
+                        <a class="nav-link" href="#chat">Chat</a>
                     </li>
                     <li class="nav-item">
-                        <span class="nav-link text-muted" id="estado-usuario">
+                        <a class="nav-link" href="/dashboard">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <span class="nav-link" id="estado-usuario">
                             <i class="fas fa-user-slash me-1"></i>
                             No identificado
                         </span>
@@ -51,117 +42,235 @@
     </nav>
 
     <!-- Contenido Principal -->
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card bg-secondary text-center p-4 rounded-3 shadow">
-                    <img src="https://placehold.co/150x150/6b46c1/ffffff?text=NYRA+IA" alt="Nyra IA Logo" class="mx-auto mb-4 rounded-full border-4 border-primary">
-                    <h1 class="display-4 mb-3 text-white">¡Hola, soy Nyra IA!</h1>
-                    <p class="lead text-light">Tu asistente personal inteligente, siempre lista para ayudarte.</p>
-                    
-                    <!-- Estado del Sistema -->
-                    <div class="row mt-4 mb-4 text-start">
-                        <div class="col-md-6 mb-2">
-                            <p class="mb-1">Estado de Voz: <span class="badge bg-danger" id="estado-voz">Inactivo</span></p>
-                            <p class="mb-1">Estado de Cámara: <span class="badge bg-danger" id="estado-camara">Inactiva</span></p>
+    <div class="container mt-4">
+        <!-- Sección de Inicio -->
+        <section id="inicio" class="mb-5">
+            <div class="row">
+                <div class="col-lg-8 mx-auto text-center">
+                    <h1 class="display-4 mb-4">
+                        <i class="fas fa-brain text-primary me-3"></i>
+                        Asistente IA Avanzado
+                    </h1>
+                    <p class="lead mb-4">
+                        Sistema de inteligencia artificial con reconocimiento biométrico, 
+                        análisis de comportamiento y conversación natural.
+                    </p>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="card bg-secondary h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-eye fa-3x text-primary mb-3"></i>
+                                    <h5>Reconocimiento Facial</h5>
+                                    <p class="small">Identificación automática de usuarios</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-2">
-                            <p class="mb-1">Modelos IA: <span class="badge bg-danger" id="estado-modelos">Fallidos</span></p>
-                            <p class="mb-1">Sistema Activo: <span class="badge bg-danger" id="estado-activo">No</span></p>
+                        <div class="col-md-4">
+                            <div class="card bg-secondary h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-microphone fa-3x text-success mb-3"></i>
+                                    <h5>Reconocimiento de Voz</h5>
+                                    <p class="small">Procesamiento de comandos de voz</p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-
-                    <!-- Área de Identificación/Registro -->
-                    <div class="alert alert-info d-none mt-3" role="alert" id="resultado-identificacion">
-                        <!-- Mensaje de identificación/registro -->
-                    </div>
-
-                    <div class="d-grid gap-2 col-md-8 mx-auto mt-4">
-                        <button class="btn btn-primary btn-lg" id="btn-identificar">
-                            <i class="fas fa-user-check me-2"></i>
-                            Identificar Usuario
-                        </button>
-                        <button class="btn btn-outline-light btn-lg" id="btn-registrar">
-                            <i class="fas fa-user-plus me-2"></i>
-                            Registrar Nuevo Usuario
-                        </button>
-                    </div>
-
-                    <!-- Formulario de Registro (oculto por defecto) -->
-                    <div class="card bg-dark text-light p-3 mt-4 d-none" id="formulario-registro">
-                        <h5 class="card-title text-center mb-3">Registrar Nuevo Usuario</h5>
-                        <div class="mb-3">
-                            <label for="nombre-usuario" class="form-label">Nombre de Usuario:</label>
-                            <input type="text" class="form-control" id="nombre-usuario" placeholder="Ej. Juan Pérez">
-                        </div>
-                        <div class="d-flex justify-content-around">
-                            <button class="btn btn-success" id="btn-confirmar-registro">Confirmar Registro</button>
-                            <button class="btn btn-danger" id="btn-cancelar-registro">Cancelar</button>
+                        <div class="col-md-4">
+                            <div class="card bg-secondary h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-chart-line fa-3x text-warning mb-3"></i>
+                                    <h5>Análisis de Comportamiento</h5>
+                                    <p class="small">Aprendizaje de patrones de usuario</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
                 </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Panel de Control de Usuario -->
+        <section class="mb-5">
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="card bg-secondary">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-user-plus me-2"></i>
+                                Identificación de Usuario
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <button id="btn-identificar" class="btn btn-primary me-2">
+                                    <i class="fas fa-camera me-1"></i>
+                                    Identificar Usuario
+                                </button>
+                                <button id="btn-registrar" class="btn btn-success">
+                                    <i class="fas fa-user-plus me-1"></i>
+                                    Registrar Nuevo Usuario
+                                </button>
+                            </div>
+                            <div id="resultado-identificacion" class="alert alert-info d-none"></div>
+                            
+                            <!-- Formulario de Registro (oculto inicialmente) -->
+                            <div id="formulario-registro" class="d-none mt-3">
+                                <hr>
+                                <h6>Registro de Nuevo Usuario</h6>
+                                <div class="mb-3">
+                                    <label for="nombre-usuario" class="form-label">Nombre:</label>
+                                    <input type="text" class="form-control" id="nombre-usuario" 
+                                           placeholder="Ingresa tu nombre completo">
+                                </div>
+                                <button id="btn-confirmar-registro" class="btn btn-success">
+                                    <i class="fas fa-save me-1"></i>
+                                    Confirmar Registro
+                                </button>
+                                <button id="btn-cancelar-registro" class="btn btn-secondary ms-2">
+                                    <i class="fas fa-times me-1"></i>
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card bg-secondary">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-cogs me-2"></i>
+                                Estado del Sistema
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="estado-sistema">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Sistema de Voz:</span>
+                                    <span class="badge bg-secondary" id="estado-voz">Verificando...</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Cámara:</span>
+                                    <span class="badge bg-secondary" id="estado-camara">Verificando...</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Modelos IA:</span>
+                                    <span class="badge bg-secondary" id="estado-modelos">Verificando...</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>Sistema Activo:</span>
+                                    <span class="badge bg-secondary" id="estado-activo">Verificando...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <!-- Sección de Chat -->
-        <div class="row justify-content-center mt-5">
-            <div class="col-md-8">
-                <div class="card bg-secondary p-4 rounded-3 shadow">
-                    <h2 class="text-3xl font-bold mb-4 text-white text-center">Chatea con Nyra</h2>
-                    <div id="area-mensajes" class="bg-dark p-3 rounded-3 mb-3" style="height: 300px; overflow-y: auto;">
-                        <!-- Mensajes se añadirán aquí -->
-                        <div class="mensaje-sistema text-start mb-2">
-                            <span class="badge bg-success p-2 rounded-pill">¡Hola! ¿En qué puedo ayudarte hoy?</span>
+        <section id="chat" class="mb-5">
+            <div class="row">
+                <div class="col-lg-10 mx-auto">
+                    <div class="card bg-secondary">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-comments me-2"></i>
+                                Chat con el Asistente IA
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Área de mensajes -->
+                            <div id="area-mensajes" class="border rounded p-3 mb-3" 
+                                 style="height: 400px; overflow-y: auto; background-color: #343a40;">
+                                <div class="mensaje-sistema text-center text-muted">
+                                    <i class="fas fa-robot me-2"></i>
+                                    ¡Hola! Soy tu asistente IA. ¿En qué puedo ayudarte hoy?
+                                </div>
+                            </div>
+                            
+                            <!-- Área de entrada -->
+                            <div class="input-group">
+                                <input type="text" id="input-mensaje" class="form-control" 
+                                       placeholder="Escribe tu mensaje aquí..." 
+                                       onkeypress="if(event.key==='Enter') enviarMensaje()">
+                                <button class="btn btn-primary" onclick="enviarMensaje()">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                                <button class="btn btn-success" id="btn-voz" onclick="comandoVoz()">
+                                    <i class="fas fa-microphone"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Indicador de escritura -->
+                            <div id="indicador-escritura" class="d-none mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-circle-notch fa-spin me-1"></i>
+                                    El asistente está escribiendo...
+                                </small>
+                            </div>
                         </div>
                     </div>
-                    <div class="d-flex mb-3 align-items-center">
-                        <input type="text" class="form-control me-2" id="input-mensaje" placeholder="Escribe tu mensaje...">
-                        <button class="btn btn-primary" id="btn-enviar">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                        <button class="btn btn-info ms-2" id="btn-voz">
-                            <i class="fas fa-microphone"></i>
-                        </button>
-                    </div>
-                    <div id="indicador-escritura" class="text-muted text-sm d-none">
-                        Nyra está escribiendo... <i class="fas fa-spinner fa-spin"></i>
-                    </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Estadísticas Rápidas -->
-        <div class="row mt-5 text-center">
-            <div class="col-md-3 mb-3">
-                <div class="card bg-primary p-3 rounded-3">
-                    <h4 class="text-white mb-1">Usuarios</h4>
-                    <p class="display-5 text-white" id="stat-usuarios">0</p>
+        <!-- Sección de Estadísticas Rápidas -->
+        <section class="mb-5">
+            <div class="row" id="estadisticas-rapidas">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-center">
+                        <div class="card-body">
+                            <i class="fas fa-users fa-2x mb-2"></i>
+                            <h4 id="stat-usuarios">-</h4>
+                            <small>Usuarios Registrados</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-center">
+                        <div class="card-body">
+                            <i class="fas fa-comments fa-2x mb-2"></i>
+                            <h4 id="stat-conversaciones">-</h4>
+                            <small>Conversaciones Hoy</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-center">
+                        <div class="card-body">
+                            <i class="fas fa-clock fa-2x mb-2"></i>
+                            <h4 id="stat-uptime">-</h4>
+                            <small>Horas Activo</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-center">
+                        <div class="card-body">
+                            <i class="fas fa-chart-bar fa-2x mb-2"></i>
+                            <h4 id="stat-eventos">-</h4>
+                            <small>Eventos del Sistema</small>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-3 mb-3">
-                <div class="card bg-success p-3 rounded-3">
-                    <h4 class="text-white mb-1">Conversaciones Hoy</h4>
-                    <p class="display-5 text-white" id="stat-conversaciones">0</p>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="card bg-warning p-3 rounded-3">
-                    <h4 class="text-dark mb-1">Horas Activo</h4>
-                    <p class="display-5 text-dark" id="stat-uptime">0.0</p>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="card bg-info p-3 rounded-3">
-                    <h4 class="text-white mb-1">Eventos Sistema</h4>
-                    <p class="display-5 text-white" id="stat-eventos">0</p>
-                </div>
-            </div>
-        </div>
+        </section>
     </div>
+
+    <!-- Footer -->
+    <footer class="bg-secondary text-center py-3 mt-5">
+        <div class="container">
+            <p class="mb-0">
+                {{ sistema_nombre }} v{{ sistema_version }} - 
+                Sistema de IA con Reconocimiento Biométrico
+            </p>
+            <small class="text-muted">
+                Última actualización: <span id="timestamp-footer">{{ timestamp_actual|datetime }}</span>
+            </small>
+        </div>
+    </footer>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="script.js"></script> <!-- Ruta corregida -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

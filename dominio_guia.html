@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nyra IA Asistent - Guía de Dominio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* bg-gray-900 */
+            color: #e2e8f0; /* text-gray-200 */
+        }
+        .card {
+            background-color: #2d3748; /* bg-gray-800 */
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(71, 85, 105, 0.5); /* border-gray-600 */
+        }
+        .header-bg {
+            background-image: linear-gradient(to right, #4c51bf, #6b46c1); /* bg-purple-600 to bg-indigo-700 */
+        }
+        .btn-primary {
+            background-image: linear-gradient(to right, #6b46c1, #4c51bf); /* bg-purple-600 to bg-indigo-700 */
+            color: white;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            transition: transform 0.2s ease-in-out;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .step-icon {
+            color: #63b3ed; /* text-blue-400 */
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <div class="container mx-auto max-w-4xl bg-gray-900 rounded-lg shadow-lg overflow-hidden">
+        <!-- Header -->
+        <header class="header-bg p-6 text-white text-center rounded-t-lg">
+            <h1 class="text-4xl font-bold mb-2">
+                <i class="fas fa-robot text-purple-200 mr-3"></i>Nyra IA Asistent
+            </h1>
+            <p class="text-xl font-light">Guía Rápida para Configurar tu Dominio</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="p-8">
+            <p class="text-gray-300 text-lg mb-8 text-center">
+                ¡Con Nyra IA, tener tu propia dirección web es más fácil de lo que imaginas! Sigue estos pasos para obtener tu dominio y conectarlo.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Paso 1: Elegir el Nombre -->
+                <div class="card p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="text-blue-400 text-3xl mb-4 text-center step-icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <h2 class="text-2xl font-semibold mb-3 text-white text-center">1. Elige tu Nombre Ideal</h2>
+                        <p class="text-gray-300 text-center">Piensa en un nombre relevante, fácil de recordar y escribir. Investiga la disponibilidad de extensiones como `.com`, `.ai`, o `.io`.</p>
+                    </div>
+                </div>
+
+                <!-- Paso 2: Encontrar un Registrador -->
+                <div class="card p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="text-blue-400 text-3xl mb-4 text-center step-icon">
+                            <i class="fas fa-building"></i>
+                        </div>
+                        <h2 class="text-2xl font-semibold mb-3 text-white text-center">2. Busca un Registrador Confiable</h2>
+                        <p class="text-gray-300 text-center">Registradores populares incluyen Namecheap, GoDaddy, o Google Domains. Busca precios claros y protección de privacidad (Whois).</p>
+                    </div>
+                </div>
+
+                <!-- Paso 3: Comprar y Registrar -->
+                <div class="card p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="text-blue-400 text-3xl mb-4 text-center step-icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <h2 class="text-2xl font-semibold mb-3 text-white text-center">3. Compra y Registra tu Dominio</h2>
+                        <p class="text-gray-300 text-center">Usa la herramienta de búsqueda del registrador, añade al carrito, completa tus datos de contacto y realiza el pago. ¡No olvides verificar tu email!</p>
+                    </div>
+                </div>
+
+                <!-- Paso 4: Configurar DNS con Cloudflare -->
+                <div class="card p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="text-blue-400 text-3xl mb-4 text-center step-icon">
+                            <i class="fas fa-cloud"></i>
+                        </div>
+                        <h2 class="text-2xl font-semibold mb-3 text-white text-center">4. Configura DNS con Cloudflare</h2>
+                        <p class="text-gray-300 text-center">Añade tu dominio a Cloudflare, luego cambia los "Nameservers" en tu registrador por los que te dé Cloudflare. Espera la propagación.</p>
+                    </div>
+                </div>
+
+                <!-- Paso 5: Configurar Cloudflare Tunnel -->
+                <div class="md:col-span-2 card p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="text-blue-400 text-3xl mb-4 text-center step-icon">
+                            <i class="fas fa-tunnel"></i>
+                        </div>
+                        <h2 class="text-2xl font-semibold mb-3 text-white text-center">5. ¡Activa Cloudflare Tunnel!</h2>
+                        <p class="text-gray-300 text-center mb-4">Instala `cloudflared` en tu Colab, autentícalo con tu cuenta de Cloudflare. Luego, crea un túnel persistente y un registro CNAME en tu DNS de Cloudflare que apunte a tu túnel. Finalmente, ejecuta el túnel en Colab con tu subdominio.</p>
+                        <p class="text-sm text-gray-400 text-center">
+                            Ejemplo: `nyra.tudominio.com` (esta será tu URL fija para la IA).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-10">
+                <p class="text-gray-300 text-lg mb-4">¡Listo! Con estos pasos, tu asistente Nyra IA tendrá una presencia online profesional y estable.</p>
+                <button class="btn-primary">
+                    <i class="fas fa-cogs mr-2"></i>Ir a Configuración de Nyra
+                </button>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 p-4 text-center text-gray-500 text-sm rounded-b-lg">
+            <p>&copy; 2023 Nyra IA Asistent. Todos los derechos reservados.</p>
+        </footer>
+    </div>
+
+</body>
+</html>

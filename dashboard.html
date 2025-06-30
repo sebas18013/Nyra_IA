@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - {{ sistema_nombre }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-dark text-light">
+    <!-- Navegación -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-robot me-2"></i>
+                {{ sistema_nombre }}
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">
+                    <i class="fas fa-home me-1"></i>
+                    Inicio
+                </a>
+                <span class="nav-link active">
+                    <i class="fas fa-chart-line me-1"></i>
+                    Dashboard
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        {% if error %}
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Error: {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Resumen del Usuario Actual -->
+        {% if usuario_actual %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card bg-success">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <i class="fas fa-user-check fa-3x"></i>
+                            </div>
+                            <div class="col">
+                                <h4 class="mb-1">Usuario Identificado: {{ usuario_actual.nombre }}</h4>
+                                <p class="mb-0">
+                                    ID: {{ usuario_actual.id }} | 
+                                    Confianza: {{ "%.1f"|format(usuario_actual.confianza * 100) }}%
+                                </p>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-light" onclick="generarAnalisisComportamiento()">
+                                    <i class="fas fa-chart-pie me-1"></i>
+                                    Análisis de Comportamiento
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body text-center">
+                        <i class="fas fa-user-slash fa-2x mb-2"></i>
+                        <h5>No hay usuario identificado</h5>
+                        <p class="mb-0">Por favor, identifícate o regístrate desde la página principal</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Estadísticas Principales -->
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-primary text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-users fa-3x mb-3"></i>
+                        <h3>{{ stats.total_usuarios or 0 }}</h3>
+                        <p class="mb-0">Usuarios Registrados</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-success text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-comments fa-3x mb-3"></i>
+                        <h3>{{ stats.conversaciones_hoy or 0 }}</h3>
+                        <p class="mb-0">Conversaciones Hoy</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-warning text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-clock fa-3x mb-3"></i>
+                        <h3>{{ "%.1f"|format(stats.uptime_horas or 0) }}</h3>
+                        <p class="mb-0">Horas Activo</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-info text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-microchip fa-3x mb-3"></i>
+                        <h3>{{ stats.eventos_sistema or 0 }}</h3>
+                        <p class="mb-0">Eventos del Sistema</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estado de Componentes -->
+        <div class="row mb-4">
+            <div class="col-lg-4 mb-3">
+                <div class="card bg-secondary h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-microphone me-2"></i>
+                            Sistema de Voz
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stats_voz %}
+                        <div class="mb-2">
+                            <span class="badge {{ 'bg-success' if stats_voz.calibrado else 'bg-danger' }}">
+                                {{ 'Calibrado' if stats_voz.calibrado else 'No Calibrado' }}
+                            </span>
+                        </div>
+                        <ul class="list-unstyled">
+                            <li><strong>Umbral Energía:</strong> {{ stats_voz.energy_threshold or 'N/A' }}</li>
+                            <li><strong>Umbral Pausa:</strong> {{ stats_voz.pause_threshold or 'N/A' }}</li>
+                            <li><strong>Dispositivo:</strong> {{ stats_voz.dispositivo_activo or 'N/A' }}</li>
+                            <li><strong>Escucha Continua:</strong> 
+                                <span class="badge {{ 'bg-success' if stats_voz.escuchando_continuo else 'bg-secondary' }}">
+                                    {{ 'Activa' if stats_voz.escuchando_continuo else 'Inactiva' }}
+                                </span>
+                            </li>
+                        </ul>
+                        {% else %}
+                        <p class="text-muted">Información no disponible</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 mb-3">
+                <div class="card bg-secondary h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-camera me-2"></i>
+                            Sistema Facial
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stats_facial %}
+                        <div class="mb-2">
+                            <span class="badge {{ 'bg-success' if stats_facial.inicializado else 'bg-danger' }}">
+                                {{ 'Inicializado' if stats_facial.inicializado else 'No Inicializado' }}
+                            </span>
+                        </div>
+                        <ul class="list-unstyled">
+                            <li><strong>Cámara:</strong> {{ stats_facial.camara_activa or 'N/A' }}</li>
+                            <li><strong>Resolución:</strong> 
+                                {% if stats_facial.resolucion %}
+                                    {{ stats_facial.resolucion[0] }}x{{ stats_facial.resolucion[1] }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </li>
+                            <li><strong>FPS:</strong> {{ stats_facial.fps or 'N/A' }}</li>
+                            <li><strong>Modelo:</strong> {{ stats_facial.modelo_deteccion or 'N/A' }}</li>
+                            <li><strong>Capturando:</strong>
+                                <span class="badge {{ 'bg-success' if stats_facial.capturando else 'bg-secondary' }}">
+                                    {{ 'Activo' if stats_facial.capturando else 'Inactivo' }}
+                                </span>
+                            </li>
+                        </ul>
+                        {% else %}
+                        <p class="text-muted">Información no disponible</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 mb-3">
+                <div class="card bg-secondary h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-brain me-2"></i>
+                            Análisis de Comportamiento
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stats_comportamiento %}
+                        <ul class="list-unstyled">
+                            <li><strong>Usuarios con Análisis:</strong> {{ stats_comportamiento.usuarios_con_analisis or 0 }}</li>
+                            <li><strong>Interacciones Totales:</strong> {{ stats_comportamiento.interacciones_totales or 0 }}</li>
+                            <li><strong>Usuarios Activos (7d):</strong> {{ stats_comportamiento.usuarios_activos_ultima_semana or 0 }}</li>
+                            <li><strong>Patrones Detectados:</strong> {{ stats_comportamiento.patrones_detectados or 0 }}</li>
+                        </ul>
+                        {% else %}
+                        <p class="text-muted">Información no disponible</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráficos y Análisis -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-3">
+                <div class="card bg-secondary">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            Actividad del Sistema
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="grafico-actividad" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-6 mb-3">
+                <div class="card bg-secondary">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-pie me-2"></i>
+                            Distribución de Eventos
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="grafico-eventos" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Análisis de Comportamiento -->
+        <div class="row mb-4" id="panel-analisis" style="display: none;">
+            <div class="col-12">
+                <div class="card bg-secondary">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user-chart me-2"></i>
+                            Análisis de Comportamiento del Usuario
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="contenido-analisis">
+                            <div class="text-center">
+                                <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                                <p>Generando análisis...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controles del Sistema -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card bg-secondary">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-cogs me-2"></i>
+                            Controles del Sistema
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <button class="btn btn-warning w-100" onclick="actualizarEstadisticas()">
+                                    <i class="fas fa-sync me-1"></i>
+                                    Actualizar Estadísticas
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-info w-100" onclick="crearBackup()">
+                                    <i class="fas fa-save me-1"></i>
+                                    Crear Backup
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-secondary w-100" onclick="limpiarDatos()">
+                                    <i class="fas fa-broom me-1"></i>
+                                    Limpiar Datos Antiguos
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-primary w-100" onclick="abrirConfiguracion()">
+                                    <i class="fas fa-cog me-1"></i>
+                                    Configuración
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log de Eventos Recientes -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card bg-secondary">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list me-2"></i>
+                            Registro de Eventos del Sistema
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="log-eventos" style="height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-clock me-2"></i>
+                                Cargando eventos del sistema...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configuración -->
+    <div class="modal fade" id="modal-configuracion" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cog me-2"></i>
+                        Configuración del Sistema
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-configuracion">
+                        <div class="mb-3">
+                            <label class="form-label">Umbral Confianza Facial:</label>
+                            <input type="range" class="form-range" id="umbral-facial" min="0.1" max="1.0" step="0.1" value="0.6">
+                            <small class="text-muted">Valor: <span id="valor-facial">0.6</span></small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Umbral Confianza Voz:</label>
+                            <input type="range" class="form-range" id="umbral-voz" min="0.1" max="1.0" step="0.1" value="0.7">
+                            <small class="text-muted">Valor: <span id="valor-voz">0.7</span></small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Tiempo Espera Comando (segundos):</label>
+                            <input type="number" class="form-control" id="tiempo-espera" min="1" max="30" value="5">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Palabra de Activación:</label>
+                            <input type="text" class="form-control" id="palabra-activacion" value="asistente">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="modo-debug">
+                            <label class="form-check-label" for="modo-debug">
+                                Modo Debug
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarConfiguracion()">
+                        <i class="fas fa-save me-1"></i>
+                        Guardar Cambios
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Variables globales
+        let estadisticasChart = null;
+        let eventosChart = null;
+
+        // Inicializar dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            actualizarEstadisticas();
+            inicializarGraficos();
+            cargarEventosRecientes();
+            
+            // Auto-actualizar cada 30 segundos
+            setInterval(actualizarEstadisticas, 30000);
+        });
+
+        // Funciones del dashboard
+        function actualizarEstadisticas() {
+            fetch('/api/obtener_estadisticas')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error:', data.error);
+                        return;
+                    }
+                    
+                    // Actualizar gráficos
+                    actualizarGraficos(data);
+                })
+                .catch(error => {
+                    console.error('Error obteniendo estadísticas:', error);
+                });
+        }
+
+        function inicializarGraficos() {
+            // Gráfico de actividad
+            const ctxActividad = document.getElementById('grafico-actividad').getContext('2d');
+            estadisticasChart = new Chart(ctxActividad, {
+                type: 'line',
+                data: {
+                    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                    datasets: [{
+                        label: 'Conversaciones',
+                        data: [12, 19, 15, 17, 14, 20, 18],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'white'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        },
+                        y: {
+                            ticks: { color: 'white' },
+                            grid: { color: 'rgba(255,255,255,0.1)' }
+                        }
+                    }
+                }
+            });
+
+            // Gráfico de eventos
+            const ctxEventos = document.getElementById('grafico-eventos').getContext('2d');
+            eventosChart = new Chart(ctxEventos, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Identificación Facial', 'Comandos de Voz', 'Análisis Comportamiento', 'Otros'],
+                    datasets: [{
+                        data: [30, 40, 20, 10],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.8)',
+                            'rgba(54, 162, 235, 0.8)',
+                            'rgba(255, 205, 86, 0.8)',
+                            'rgba(75, 192, 192, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: 'white'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function actualizarGraficos(data) {
+            // Aquí se actualizarían los gráficos con datos reales
+            // Por ahora mantienen datos estáticos para demostración
+        }
+
+        function generarAnalisisComportamiento() {
+            {% if usuario_actual %}
+            const panel = document.getElementById('panel-analisis');
+            const contenido = document.getElementById('contenido-analisis');
+            
+            panel.style.display = 'block';
+            contenido.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p>Generando análisis de comportamiento...</p>
+                </div>
+            `;
+            
+            fetch(`/api/analisis_comportamiento/{{ usuario_actual.id }}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        contenido.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    contenido.innerHTML = `
+                        <div class="alert alert-info">
+                            <pre style="white-space: pre-wrap; margin: 0;">${data.analisis}</pre>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    contenido.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                });
+            {% else %}
+            alert('No hay usuario identificado para analizar');
+            {% endif %}
+        }
+
+        function crearBackup() {
+            if (confirm('¿Crear backup del sistema? Esto puede tomar unos momentos.')) {
+                fetch('/api/backup_sistema', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Backup creado exitosamente');
+                        } else {
+                            alert('Error creando backup: ' + (data.error || 'Error desconocido'));
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error: ' + error.message);
+                    });
+            }
+        }
+
+        function limpiarDatos() {
+            const dias = prompt('¿Cuántos días de datos mantener? (por defecto 30):', '30');
+            if (dias && !isNaN(dias)) {
+                if (confirm(`¿Eliminar datos anteriores a ${dias} días?`)) {
+                    fetch('/api/limpiar_datos', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ dias: parseInt(dias) })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Datos limpiados exitosamente');
+                            actualizarEstadisticas();
+                        } else {
+                            alert('Error: ' + (data.error || 'Error desconocido'));
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error: ' + error.message);
+                    });
+                }
+            }
+        }
+
+        function abrirConfiguracion() {
+            const modal = new bootstrap.Modal(document.getElementById('modal-configuracion'));
+            modal.show();
+        }
+
+        function guardarConfiguracion() {
+            const config = {
+                umbral_confianza_facial: parseFloat(document.getElementById('umbral-facial').value),
+                umbral_confianza_voz: parseFloat(document.getElementById('umbral-voz').value),
+                tiempo_espera_comando: parseInt(document.getElementById('tiempo-espera').value),
+                palabra_activacion: document.getElementById('palabra-activacion').value,
+                modo_debug: document.getElementById('modo-debug').checked
+            };
+            
+            fetch('/api/configurar_sistema', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Configuración guardada exitosamente');
+                    bootstrap.Modal.getInstance(document.getElementById('modal-configuracion')).hide();
+                } else {
+                    alert('Error: ' + (data.error || 'Error desconocido'));
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error.message);
+            });
+        }
+
+        function cargarEventosRecientes() {
+            const logContainer = document.getElementById('log-eventos');
+            logContainer.innerHTML = `
+                <div class="small">
+                    <div class="border-bottom pb-2 mb-2">
+                        <i class="fas fa-info-circle text-info me-2"></i>
+                        <span class="text-muted">${new Date().toLocaleString()}</span> - 
+                        Sistema iniciado correctamente
+                    </div>
+                    <div class="border-bottom pb-2 mb-2">
+                        <i class="fas fa-user-check text-success me-2"></i>
+                        <span class="text-muted">${new Date().toLocaleString()}</span> - 
+                        Dashboard accedido
+                    </div>
+                    <div class="border-bottom pb-2 mb-2">
+                        <i class="fas fa-chart-line text-warning me-2"></i>
+                        <span class="text-muted">${new Date().toLocaleString()}</span> - 
+                        Estadísticas actualizadas
+                    </div>
+                </div>
+            `;
+        }
+
+        // Event listeners para sliders de configuración
+        document.getElementById('umbral-facial')?.addEventListener('input', function() {
+            document.getElementById('valor-facial').textContent = this.value;
+        });
+
+        document.getElementById('umbral-voz')?.addEventListener('input', function() {
+            document.getElementById('valor-voz').textContent = this.value;
+        });
+    </script>
+</body>
+</html>
