@@ -41,6 +41,14 @@ Obtener la URL de Cloudflare Tunnel: Una vez que la celda de Cloudflare Tunnel s
 2. Configuración del Frontend (GitHub Pages)
 El frontend ya está alojado en GitHub Pages en https://nyra.com. Para que se comunique con tu backend, necesitas actualizar la URL de la API:
 
+Añadir el Dominio a Cloudflare (si aún no lo has hecho):
+
+Si estás utilizando Cloudflare para gestionar tu dominio, ve a tu cuenta de Cloudflare.
+
+En la sección "Sitios" o "Add Site", introduce tu dominio sin http:// ni https:// ni barras al final. Por ejemplo, escribe solo nyra.com.
+
+Sigue los pasos para que Cloudflare escanee tus registros DNS y te proporcione los Nameservers que debes configurar en tu registrador de dominio.
+
 Editar script.js y dashboard.html:
 
 En tu Google Drive, abre los archivos script.js (ubicado en MyDrive/python_ias/IA/static/script.js) y dashboard.html (ubicado en MyDrive/python_ias/IA/templates/dashboard.html).
